@@ -71,9 +71,9 @@ npm run typecheck          # tsc --noEmit
 npm test                   # vitest: domínio + serviço (34 testes)
 npx supabase test db supabase/tests/vagas_rls.sql   # 26 asserções de RLS no Postgres
 
-# Edge Function (Deno)
+# Edge Function (Deno) — a partir da pasta da função, o import map de deno.json é aplicado
 deno task --cwd supabase/functions/ingest-vaga check
-deno test --allow-env --allow-net supabase/functions/ingest-vaga/_shared/
+deno task --cwd supabase/functions/ingest-vaga test    # 34 testes
 ```
 
 O script de RLS roda dentro de uma transação com `ROLLBACK` no fim — os usuários e vagas de teste não
@@ -131,11 +131,25 @@ Há janela de **DNS rebinding** entre a resolução que a função aprova e o `f
 não permitem fixar o IP resolvido. A mitigação é o ambiente de execução (sem rede privada), não o código.
 O detalhe está em `_shared/urlSafety.ts`.
 
+### Pré-requisitos manuais
+
+Nada abaixo é feito por código — precisam ser feitos uma vez no painel ou no CLI:
+
+- **Secrets**: `supabase secrets set GEMINI_API_KEY GEMINI_MODEL ALLOWED_EMAILS APP_ORIGIN`
+  (a tabela acima diz o que cada uma recebe).
+- **Migração da auditoria**: `supabase db push` aplica `ingest_log` com RLS.
+- **Provedor Google OAuth**: já configurado no projeto.
+- **`verify_jwt`**: confirme que continua habilitado na função depois do deploy — o output de
+  `supabase functions deploy` é quem diz. Sem ele, a autenticação do passo seguinte do pipeline não roda.
+
 Deploy:
 
 ```bash
 supabase functions deploy ingest-vaga
 ```
+
+Rollback: `supabase functions delete ingest-vaga` e remover a tabela de auditoria. Nenhum dado de
+`vagas` é tocado.
 
 ## Deploy
 

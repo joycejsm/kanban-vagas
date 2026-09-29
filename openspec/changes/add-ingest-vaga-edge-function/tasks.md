@@ -52,6 +52,6 @@
 
 ## 8. Verificação de integração
 
-- [ ] 8.1 Adicionar ao README a seção da função com os secrets necessários, o comando de deploy e o aviso de pré-requisitos manuais; verificar que os comandos citados constam na documentação
-- [ ] 8.2 Rodar o typecheck do projeto e a suíte de testes, e `deno check` na função, confirmando que tudo passa; registrar a saída
-- [ ] 8.3 Rodar `supabase test db` garantindo que os testes de RLS da Fase 1 continuam passando com a nova migração aplicada; verificar com a suíte completa sem falhas
+- [x] 8.1 Adicionar ao README a seção da função com os secrets necessários, o comando de deploy e o aviso de pré-requisitos manuais; verificar que os comandos citados constam na documentação
+- [x] 8.2 Rodar o typecheck do projeto e a suíte de testes, e `deno check` na função, confirmando que tudo passa; registrar a saída
+- [x] 8.3 Rodar `supabase test db` garantindo que os testes de RLS da Fase 1 continuam passando com a nova migração aplicada; verificar com a suíte completa sem falhas
