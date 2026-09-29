@@ -82,12 +82,14 @@ nova variável `NEXT_PUBLIC_*`, e nenhuma service role key SHALL estar acessíve
 - **THEN** ela SHALL falhar com mensagem que nomeie a variável ausente e o arquivo `.env.local` como origem
   esperada, sem stack trace e sem valor de qualquer segredo
 
-#### Scenario: Chave anon é preservada no bundle do cliente
+#### Scenario: Nenhum segredo é exposto ao navegador
 
 - **GIVEN** a aplicação compilada
 - **WHEN** o bundle enviado ao navegador é inspecionado
-- **THEN** ele SHALL conter a chave anon, que é pública por definição e protegida por RLS, e SHALL NOT conter
-  service role key, chave da API do Gemini nem qualquer outro segredo
+- **THEN** ele SHALL NOT conter service role key, chave da API do Gemini nem qualquer outro segredo, e
+  SHALL NOT conter nenhuma variável `NEXT_PUBLIC_*` além das duas já existentes
+- **AND** a chave anon MAY constar dele a partir da Fase 3, quando existir cliente Supabase no navegador —
+  neste scaffold ela é lida apenas no servidor e não é embutida em bundle algum
 
 #### Scenario: Segredos não aparecem no exemplo de ambiente
 

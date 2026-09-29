@@ -1,0 +1,8 @@
+/**
+ * Folha de estilos global.
+ *
+ * A diretiva abaixo é a configuração do Tailwind v4: não há `tailwind.config.js` neste projeto.
+ * A varredura de arquivos é automática a partir da raiz de estilos, e qualquer classe usada
+ * em `src/app` (ou em `src/components` na Fase 4) é emitida sem configuração por arquivo.
+ */
+@import 'tailwindcss';

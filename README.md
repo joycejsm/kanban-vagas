@@ -19,10 +19,19 @@ extrai título, empresa e requisitos, e a vaga entra no quadro — de onde sai p
 | 2 | Edge Function `ingest-vaga` | ✅ implementado e testado |
 | 3 | Auth + Server Actions | ⏳ proposal + specs + design |
 | 4 | Interface Kanban | ⏳ change criada, vazia |
+| — | Scaffold Next.js (`src/app`, env no servidor) | ✅ implementado e testado |
 
 ## Estrutura
 
 ```
+src/app/layout.tsx                   Layout raiz do App Router (Server Component)
+src/app/page.tsx                     Rota / mínima, sem UI de produto
+src/app/globals.css                  Folha de estilos global (@import do Tailwind v4)
+src/config/serverEnv.ts              Config do Supabase lida no servidor e validada com Zod
+src/instrumentation.ts               Recusa a subida em dev quando falta configuração
+next.config.ts                       Config do Next (sem CSP: isso é da fase 3)
+postcss.config.mjs                   Plugin do Tailwind v4
+
 src/domain/vaga.ts                    Schemas Zod (VagaCreateInput, VagaRow, StatusVaga)
 src/services/vagaService.ts           Acesso às vagas, cliente Supabase por injeção
 src/services/vagaService.errors.ts    VagaDuplicadaError, VagaServiceError
@@ -63,12 +72,32 @@ npx supabase status -o env  # imprime API_URL e DB_URL
 
 Studio: http://127.0.0.1:54323
 
+### Rodar a aplicação
+
+Copie `.env.example` para `.env.local` e preencha as duas variáveis `NEXT_PUBLIC_*`. Sem elas o servidor
+de desenvolvimento **recusa subir** e diz exatamente qual está faltando — ele não sobe degradado.
+
+```bash
+npm install
+npm run dev                  # http://localhost:3000
+```
+
+Build de produção:
+
+```bash
+npm run build                # next build
+npm run start                # serve o artefato de produção
+```
+
+A rota `/` é um Server Component mínimo, sem UI de produto: a interface do quadro é da fase 4. O build não
+precisa de `.env.local` — a configuração é lida em tempo de requisição, não em tempo de build.
+
 ### Rodar os testes
 
 ```bash
 npm install
 npm run typecheck          # tsc --noEmit
-npm test                   # vitest: domínio + serviço (34 testes)
+npm test                   # vitest: domínio + serviço + scaffold (42 testes)
 npx supabase test db supabase/tests/vagas_rls.sql   # 26 asserções de RLS no Postgres
 
 # Edge Function (Deno) — a partir da pasta da função, o import map de deno.json é aplicado
