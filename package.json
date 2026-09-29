@@ -1,0 +1,21 @@
+{
+  "name": "kanban-vagas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "supabase": "^2.118.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
