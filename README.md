@@ -162,14 +162,14 @@ Respostas: `201 { vaga }`, ou `{ code, message }` com `401` (sessão), `403` (or
 
 ### Secrets obrigatórias
 
-Definidas com `supabase secrets set` — nunca no frontend e nunca em `NEXT_PUBLIC_*`:
+Definidas com `scripts/configurar-edge-function.sh` — nunca no frontend e nunca em `NEXT_PUBLIC_*`:
 
 | Secret | Valor |
 |--------|-------|
 | `GEMINI_API_KEY` | chave da API do Google Gemini |
-| `GEMINI_MODEL` | ex. `gemini-2.5-flash` |
+| `GEMINI_MODEL` | ex. `gemini-3.5-flash` |
 | `ALLOWED_EMAILS` | lista separada por vírgula |
-| `APP_ORIGIN` | origem do app, ex. `http://localhost:3000` |
+| `APP_ORIGIN` | origem do app, ex. `http://localhost:3002` |
 
 ### O que a função NÃO faz
 
@@ -188,8 +188,10 @@ O detalhe está em `_shared/urlSafety.ts`.
 
 Nada abaixo é feito por código — precisam ser feitos uma vez no painel ou no CLI:
 
-- **Secrets**: `supabase secrets set GEMINI_API_KEY GEMINI_MODEL ALLOWED_EMAILS APP_ORIGIN`
-  (a tabela acima diz o que cada uma recebe).
+- **Secrets**: `scripts/configurar-edge-function.sh` publica as quatro e implanta a função.
+  Ele lê `GEMINI_API_KEY` do Infisical e deriva `ALLOWED_EMAILS` de `public.allowed_emails`,
+  para que a lista não seja digitada em três lugares (ver
+  [O que fica no Supabase, para a Edge Function](#o-que-fica-no-supabase-para-a-edge-function)).
 - **Migração da auditoria**: `supabase db push` aplica `ingest_log` com RLS.
 - **Provedor Google OAuth**: já configurado no projeto.
 - **`verify_jwt`**: confirme que continua habilitado na função depois do deploy — o output de
@@ -207,10 +209,9 @@ Rollback: `supabase functions delete ingest-vaga` e remover a tabela de auditori
 ## Deploy
 
 ```bash
-supabase link                        # uma vez, associa o projeto
-supabase db push                     # aplica as migrações
-supabase functions deploy ingest-vaga
-supabase secrets set GEMINI_API_KEY GEMINI_MODEL ALLOWED_EMAILS APP_ORIGIN
+supabase link                              # uma vez, associa o projeto
+supabase db push                           # aplica as migrações
+scripts/configurar-edge-function.sh        # secrets + deploy da ingest-vaga
 ```
 
 O provedor Google OAuth já está configurado no projeto Supabase. Nada disso é feito por código.
@@ -320,8 +321,23 @@ arquivo versionado. `.env.example` serve de base, com valores de marcador.
 ### O que fica no Supabase, para a Edge Function
 
 ```bash
-supabase secrets set GEMINI_API_KEY GEMINI_MODEL ALLOWED_EMAILS APP_ORIGIN
+scripts/configurar-edge-function.sh
 ```
+
+Das quatro secrets, **só `GEMINI_API_KEY` precisa ser buscada fora** (aistudio.google.com), e
+ela mora no Infisical. As outras três derivam, e derivar é o ponto:
+
+| secret | de onde vem |
+|---|---|
+| `GEMINI_API_KEY` | Infisical, `/nextjs` (ou digitada, se não usar Infisical) |
+| `GEMINI_MODEL` | nome do modelo, ex. `gemini-3.5-flash`; padrão do script |
+| `APP_ORIGIN` | a origem em que o app roda, ex. `http://localhost:3002` |
+| `ALLOWED_EMAILS` | `public.allowed_emails`, por `string_agg` |
+
+O script para em vez de aceitar lista digitada se o banco estiver inacessível: seguir com uma
+lista inventada é a divergência que `scripts/verificar-allowlist.sh` existe para detectar. Os
+valores vão por `--env-file` num arquivo com permissão 600, nunca por argv, para não aparecerem
+em `ps` nem no histórico.
 
 `GEMINI_API_KEY` e `GEMINI_MODEL` só existem aí. A função é o único lugar do sistema que fala
 com o LLM, e é por isso que a chave mora no ambiente dela: colocá-la no Next a colocaria no

@@ -20,11 +20,13 @@
 #   APP_ORIGIN      a origem em que o app roda; `origemPermitida` compara esquema, host
 #                   e porta por igualdade estrita, então tem que ser a porta real
 #   GEMINI_MODEL    um nome de modelo, não um segredo
-#   GEMINI_API_KEY  a única que precisa vir de fora (aistudio.google.com)
+#   GEMINI_API_KEY  a única que precisa vir de fora (aistudio.google.com) — mas já está
+#                   no Infisical, e é de lá que este script a lê
 #
-# A chave nunca é digitada no terminal nem passada por argv: entra por prompt sem eco,
-# e o `supabase secrets set` lê de um arquivo temporário com permissão 600, para que
-# nenhum valor apareça em `ps`, no histórico do shell ou no log.
+# A chave nunca é digitada no terminal nem passada por argv: o `supabase secrets set` lê
+# de um arquivo temporário com permissão 600, para que nenhum valor apareça em `ps`, no
+# histórico do shell ou no log. A ordem de leitura é variável de ambiente, Infisical,
+# prompt — o prompt é o último recurso, para quem não usa o Infisical.
 #
 # Uso:
 #   scripts/configurar-edge-function.sh                 # pergunta a chave
@@ -37,7 +39,7 @@
 
 set -uo pipefail
 
-GEMINI_MODEL_PADRAO="gemini-2.5-flash"
+GEMINI_MODEL_PADRAO="gemini-3.5-flash"
 APP_ORIGIN_PADRAO="http://localhost:3002"
 
 # O app local roda em 3002 porque 3000 e 3001 estão ocupadas por processo de outro
@@ -107,11 +109,22 @@ verde "ALLOWED_EMAILS derivada do banco: $total e-mail(s)."
 # -----------------------------------------------------------------------------
 
 CHAVE="${GEMINI_API_KEY:-}"
+
+# O Infisical é onde as credenciais deste projeto vivem, e a chave do Gemini foi para lá.
+# Lê sem imprimir: o valor vai direto para a variável e dali para o arquivo com 600.
+if [ -z "$CHAVE" ] && command -v infisical >/dev/null 2>&1; then
+  CHAVE="$(infisical export --path="${PATH_INFISICAL:-/nextjs}" --format=json 2>/dev/null \
+    | jq -r '.[] | select(.key == "GEMINI_API_KEY") | .value' | head -1)"
+  [ -n "$CHAVE" ] && echo "GEMINI_API_KEY lida do Infisical (${PATH_INFISICAL:-/nextjs})."
+fi
+
 if [ -z "$CHAVE" ]; then
   echo
-  echo "Falta GEMINI_API_KEY — a unica das quatro que nao deriva de nada aqui."
-  echo "Pega em https://aistudio.google.com/apikey e cole abaixo."
-  echo "A digitacao nao aparece na tela nem no historico."
+  echo "Falta GEMINI_API_KEY. Onde ela esta, na ordem de leitura:"
+  echo "  1. variavel de ambiente GEMINI_API_KEY"
+  echo "  2. Infisical em ${PATH_INFISICAL:-/nextjs} (https://aistudio.google.com/apikey)"
+  echo "Digitar na mao e o ultimo recurso, e a digitacao nao aparece na tela"
+  echo "nem no historico."
   printf 'GEMINI_API_KEY: '
   IFS= read -rs CHAVE
   echo
