@@ -148,12 +148,23 @@ drop table if exists public.hook_debug;
 
 ## Pendência que continua aberta depois do login
 
-**`APP_ORIGIN` da Edge Function.** O teste de `origemPermitida` é igualdade estrita, com
-esquema, host e **porta**. O README exemplifica `http://localhost:3000` e é provavelmente o
-valor real da secret. Com o app em 3002, colar uma URL vai ser recusado pela origem:
+**O cadastro por URL (Fase 4) não está nada deployado.** Não é divergência de `APP_ORIGIN`
+como se pensava: no projeto remoto
+
+- `supabase functions list` volta **vazia** — nenhuma Edge Function;
+- `POST /functions/v1/ingest-vaga` responde **404** `Requested function was not found`;
+- as secrets da função **não existem**: só há `SUPABASE_DB_URL` no projeto. Faltam
+  `GEMINI_API_KEY`, `GEMINI_MODEL`, `APP_ORIGIN` e `ALLOWED_EMAILS` — e `_shared/env.ts`
+  trata as quatro como obrigatórias, com `EnvInvalidoError` na hora. Nem o Infisical tem
+  `GEMINI_API_KEY` nem `APP_ORIGIN`.
+
+Ou seja: a feature nunca foi publicada, não está "com a porta errada". O login por Google,
+que é o que foi consertado, não depende de nada disso. Para subir:
 
 ```bash
-supabase secrets set APP_ORIGIN=http://localhost:3002
+supabase secrets set GEMINI_API_KEY=... GEMINI_MODEL=... APP_ORIGIN=http://localhost:3002 ALLOWED_EMAILS=...
+supabase functions deploy ingest-vaga
 ```
 
-Nada disso afeta o login por Google — só o cadastro por URL.
+`APP_ORIGIN` precisa ser a porta em que o app roda (3002), porque `origemPermitida` é
+igualdade estrita de esquema, host e porta.
