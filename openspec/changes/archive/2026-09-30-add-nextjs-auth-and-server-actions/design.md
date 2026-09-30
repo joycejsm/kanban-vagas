@@ -125,7 +125,7 @@ Sucesso de `adicionarVaga` revalida `/`. `atualizarStatus` **não** revalida: o 
 `ordem` pode afetar várias linhas; revalidar a cada card durante um drag burst causaria uma enxurrada de re-render. A UI
 atualiza localmente e o próximo carregamento natural já reflete o estado do banco.
 
-### D9 — CSP com nonce por resposta, sem `unsafe-inline` e sem `unsafe-eval`
+### D9 — CSP com nonce por resposta, sem `unsafe-inline` e sem `unsafe-eval` em produção
 
 A política é estática exceto pelo nonce, que é gerado por requisição. `script-src` é `'self' 'nonce-<valor>'`;
 `connect-src` lista a origem do Supabase (de env, nunca hardcoded) e os endpoints do Google para o OAuth;
@@ -169,9 +169,17 @@ sem subir banco nem Edge Function. Testes de integração reais ficam para a su�
   o efeito residual é uma linha inerte em `auth.users`, sem acesso a dados.
 - **[Hook desativado no painel = barreira caída silenciosamente]** → Documentado como pré-requisito manual
   destacado no README de implantação, e a camada do callback continua funcionando.
-- **['CSP sem nonce']** → Aceito por compatibilidade com App Router; risco residual baixo dado o tratamento do
-  LLM como texto puro. Reavaliar se algum dia entrar editor rich text ou biblioteca de terceiros que exija
-  `unsafe-inline`.
+- **[Nonce por resposta em vez de `script-src 'self'` puro]** → O App Router emite script inline em toda
+  resposta, então `'self'` sem nonce quebraria a aplicação; hash estático não serve porque o *flight payload*
+  muda a cada requisição. Custo: o nonce precisa ser echoado no atributo `nonce` dos scripts do Next e a CSP
+  precisa morar no middleware, que é o único lugar que enxerga requisição e resposta. Risco residual baixo dado o
+  tratamento do LLM como texto puro. Reavaliar se algum dia entrar editor rich text ou biblioteca de terceiros
+  que exija `unsafe-inline`.
+- **[`'unsafe-eval'` em `script-src` fora de produção]** → O build de desenvolvimento do React chama `eval()`
+  para reconstruir call stacks, e sem a diretiva o app levanta `eval() is not supported in this environment` e o
+  runtime de cliente não sobe. A diretiva é omitida em produção, que é o que o spec exige. O custo é que a
+  política não é idêntica entre dev e produção — diferença que cobre um requisito do bundle de desenvolvimento,
+  não uma concessão de segurança.
 - **[`img-src` com host do Google] → superfície de tracking Cookie em imagem de terceiro]** → Mitigado por
   `Referrer-Policy: strict-origin-when-cross-origin` e por `next/image` com `referrerPolicy` restrito quando
   possível.
