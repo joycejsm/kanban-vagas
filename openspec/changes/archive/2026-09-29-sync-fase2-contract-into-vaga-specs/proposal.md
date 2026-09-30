@@ -4,19 +4,15 @@
 
 A change `add-ingest-vaga-edge-function` (Fase 2) declarou, na seção *Modified Capabilities* da própria proposal,
 que modificaria **`vaga-domain`** e **`vaga-persistence`** — mas nunca emitiu delta de spec para nenhuma das duas.
-Os diretórios `specs/` da change arquivada contêm apenas `ingest-audit`, `ingest-vaga`, `url-safety` e
-`vaga-extraction`.
-
-O resultado é que `openspec/specs/vaga-domain/spec.md` e `openspec/specs/vaga-persistence/spec.md` descrevem
-apenas o contrato da Fase 1, e o contrato que a Fase 2 realmente fixou — testado e em produção — não existe em
-lugar nenhum da especificação.
+As main specs descrevem, portanto, apenas o contrato da Fase 1, e o contrato que a Fase 2 realmente fixou não
+existe em lugar nenhum da especificação.
 
 Isto importa agora porque a Fase 3 (`add-nextjs-auth-and-server-actions`) vai **reusar** `VagaCreateInput` como
 schema de validação de entrada de uma Server Action. Quem for escrever essa Server Action vai ler
-`vaga-domain/spec.md` achando que ele descreve tudo sobre o schema, e não vai encontrar: que o schema é também o
-**contrato de saída do LLM** validado com `safeParse`; que ele é estrito, de modo que chave fora do conjunto faz
-a validação falhar; e que o campo `url` tem procedência diferente de todos os outros — é o da requisição, nunca o
-devolvido pelo modelo. São três fatos que decidem como a validação deve ser escrita.
+`vaga-domain/spec.md` achando que ele descreve tudo sobre o schema, e não vai encontrar: que ele é também o
+**contrato de saída do LLM**; que sua estriticidade é o que rejeita chave fora do conjunto; e que o `url` tem
+procedência diferente de todos os outros campos — é o da requisição, nunca o devolvido pelo modelo. São três
+fatos que decidem como a validação deve ser escrita.
 
 ## What Changes
 
@@ -30,8 +26,9 @@ devolvido pelo modelo. São três fatos que decidem como a validação deve ser 
   `status` `'aplicado'` com `ordem` no fim da coluna de destino, calculada no servidor a partir do maior `ordem`
   da coluna, e não com o valor padrão `0` da coluna.
 
-**Nenhuma mudança de código, de comportamento ou de banco.** O código da Fase 2 já implementa os três pontos e
-já os testa; o que falta é a especificação que os descreve. Esta change altera apenas arquivos sob `openspec/`.
+**Nenhuma mudança de comportamento, de banco ou de API.** O código da Fase 2 já implementa os três pontos e
+já os testa; o que faltava era a especificação que os descreve. A única adição de código é um arquivo de teste
+novo, e o motivo está registrado abaixo.
 
 ### Escopo deliberadamente excluído
 
@@ -64,7 +61,9 @@ Nenhuma. Esta change não introduz comportamento novo.
 
 ## Impact
 
-- **Código:** nenhum. Nenhum arquivo em `src/`, `supabase/` ou `tests/` é tocado.
+- **Código:** um arquivo novo, `supabase/functions/ingest-vaga/_shared/supabase.test.ts`, com os cinco cenários
+  de inserção. Nenhuma alteração em código de produção: `supabase/functions/ingest-vaga/_shared/supabase.ts`
+  não é tocado.
 - **Banco:** nenhuma migração, nenhuma alteração de schema ou de RLS.
 - **Artefatos OpenSpec:** deltas novos em `specs/vaga-domain/spec.md` e `specs/vaga-persistence/spec.md` desta
   change, que se somam às main specs no archive.
@@ -72,3 +71,17 @@ Nenhuma. Esta change não introduz comportamento novo.
   `VagaCreateInput` sob saída não confiável. A Fase 4 passa a ter especificado onde uma vaga nova entra no quadro.
 - **Reversibilidade:** reverter o commit restaura as main specs ao estado anterior. Nenhum artefato de
   especificação já arquivado é reescrito — o que entra é aditivo.
+
+### Por que há um arquivo de teste nesta change
+
+Os três pontos desta change já estavam implementados, mas a conferência do apply mostrou que **dois deles não
+tinham cobertura alguma**: `inserirVaga` não era referenciada em nenhum `.test.ts` — os testes de `pipeline`
+injetam um dublê em `deps.inserir` e contornam a inserção real —, e o pgTAP exercita `ordem` por `UPDATE`, não
+pelo cálculo do `insert`.
+
+Promover esses comportamentos a contrato de main spec sem cobertura colocaria a especificação acima do que o
+projeto consegue provar. O modo de falha é silencioso: remover o filtro de status da consulta faz o card novo
+colar no topo da coluna, e nenhuma suíte sente. O teste entra aqui, junto do delta que ele sustenta.
+
+O limite do que esse teste prova está declarado no próprio arquivo: ele trava a aritmética e a forma da query,
+não o comportamento ponta a ponta contra o Postgres. O isolamento entre usuários continua provado pelo pgTAP.

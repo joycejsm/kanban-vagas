@@ -17,7 +17,8 @@ Fase 2 declarara as duas capabilities como modificadas e não emitiu os deltas.
 
 **Non-Goals:**
 
-- Não alterar código, migração, schema, RLS ou teste. Nenhum arquivo fora de `openspec/` é tocado.
+- Não alterar código de produção, migração, schema, RLS ou API. O único arquivo de código tocado é um teste
+  novo; ver a seção do proposal sobre por que ele entra nesta change.
 - Não reescrever `openspec/changes/archive/2026-09-29-add-ingest-vaga-edge-function/proposal.md`. Aquele
   documento conta a história do que a change pretendia fazer; corrigi-lo apagaria o registro de que o delta foi
   esquecido, que é informação útil.
