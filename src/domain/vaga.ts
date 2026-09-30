@@ -9,6 +9,17 @@ export const LIMITE_TEXTO_CURTO = 200;
 export const LIMITE_REQUISITOS = 30;
 export const LIMITE_ITEM_REQUISITO = 300;
 
+/**
+ * Limite do texto colado como fallback de extração.
+ *
+ * Mora aqui, e não na Edge Function, porque tem **dois** consumidores que precisam concordar
+ * sobre o mesmo número: a Server Action do Next (que recusa antes de gastar uma chamada de
+ * rede) e o schema de entrada da função (que recusa de novo, no limite de verdade). Divergir
+ * os dois é a forma mais barata de transformar um limite em "o usuário só descobre que
+ * estourou depois de esperar o round-trip".
+ */
+export const LIMITE_TEXTO_COLADO = 30_000;
+
 /** Status possíveis de uma vaga no quadro Kanban. Espelha o CHECK constraint da tabela `public.vagas`. */
 export const statusVagaSchema = z.enum([
   'aplicado',

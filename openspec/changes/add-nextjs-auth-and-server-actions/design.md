@@ -72,10 +72,22 @@ retroativamente a contas já criadas), e a verificação no callback é great Co
 contas criadas antes do hook ou quando ele está desligado. Nenhuma das duas é suficiente sozinha.
 
 **Privilege do hook:** `security definer` com `search_path` fixado (`auth`, `public`) e `set search_path`
-explícito, retornando erro genérico. A allowlist em si é lida de `ALLOWED_EMAILS` no servidor Next.js; no banco,
-a lista vem de uma tabela de configuração com RLS de leitura só para o dono, ou de um valor fixado na função
-dependendo da operação — decisão fechada na fase de implementação, com o comportamento (bloquear e-mail fora da
-lista) já fixado no spec.
+explícito, retornando erro genérico.
+
+**Fonte da lista no banco (D11, fechada antes da implementação):** tabela `public.allowed_emails`, com e-mail
+normalizado (`lower(trim(...))`) como chave primária, RLS habilitado e **nenhuma policy** — ou seja, `anon` e
+`authenticated` não leem nada diretamente, e a leitura acontece só dentro da função `security definer` do hook,
+que roda com o privilégio do dono da tabela. Isso é mais restritivo que "RLS de leitura só para o dono" e evita
+abrir uma policy que não serve a nenhum fluxo do app: ninguém lê a lista pela aplicação, e a administração da
+tabela (inserir/remover e-mail) é feita por job explícito com service role, nunca por requisição de usuário
+(invariante 2).
+
+**As duas listas e a divergência.** A tabela é a fonte de verdade do hook; `ALLOWED_EMAILS` no servidor Next é
+o espelho usado pela camada do callback. As duas são mantidas pelo mesmo dono e precisam ficar em sincronia —
+mas, se divergirem, o comportamento é determinístico e conservador: e-mail que está na tabela e não no
+`ALLOWED_EMAILS` é barrado no callback (a lista do banco **nunca** amplia o acesso), enquanto e-mail que está no
+`ALLOWED_EMAILS` e não na tabela só passa a valer para contas que já existem, porque o hook não roda
+retroativamente. A lista que decide o acesso de hoje é a do servidor Next.
 
 **Normalização do e-mail:** comparação case-insensitive e com `trim`. E-mail é case-insensitive na prática em
 Google; sem `lower()`, um e-mail autorizado em maiúsculas seria barrado por erro do usuário. O risco oposto
@@ -113,20 +125,35 @@ Sucesso de `adicionarVaga` revalida `/`. `atualizarStatus` **não** revalida: o 
 `ordem` pode afetar várias linhas; revalidar a cada card durante um drag burst causaria uma enxurrada de re-render. A UI
 atualiza localmente e o próximo carregamento natural já reflete o estado do banco.
 
-### D9 — CSP com `script-src 'self'` e sem `unsafe-inline`
+### D9 — CSP com nonce por resposta, sem `unsafe-inline` e sem `unsafe-eval`
 
-Next.js App Router com nonce exige middleware que reescreva todos os scripts, o que é frágil e conflita com o
-`matcher` estreito de D1. Alternativa escolhida: CSP estática sem nonce, com `script-src 'self'`, o que é
-compatível com o build padrão do Next. `connect-src` lista a origem do Supabase (de env, não hardcoded) e o
-endpoint do Google para o OAuth.
+A política é estática exceto pelo nonce, que é gerado por requisição. `script-src` é `'self' 'nonce-<valor>'`;
+`connect-src` lista a origem do Supabase (de env, nunca hardcoded) e os endpoints do Google para o OAuth;
+`img-src` traz `'self'`, `data:` e `lh3.googleusercontent.com`; `object-src 'none'`, `base-uri 'self'`,
+`frame-ancestors 'none'` e `form-action 'self'`.
 
-**Trade-off aceito:** sem nonce, um XSS que injete `<script>` inline não executa (bom), mas um gadget que
-consiga usar um arquivo servido pela própria origem escaparia. Como todo conteúdo vindo do LLM é renderizado
-como texto puro (invariante 6), a superfície é pequena. `'unsafe-eval'` fica **fora** — é desnecessário em
-produção.
+**Correção (esta decisão estava errada quando foi escrita).** A primeira versão dizia `script-src 'self'` e
+afirmava que isso era "compatível com o build padrão do Next". Não é. O App Router sempre emite script inline
+— `(self.__next_f=…).push([0])` e o *flight payload* do RSC — e `script-src 'self'` sem `'unsafe-inline'`, hash
+ou nonce os bloqueia. O resultado observado foi a página sem nenhum JavaScript e o runtime do Next sem subir
+(`InvariantError: Expected a request ID to be defined for the document via self.__next_r`), em dev **e** em
+produção. Hash estático não é saída: o *flight payload* muda a cada requisição, então não existe um conjunto fixo
+de hashes para listar. `'unsafe-inline'` resolveria, mas viola a diretiva e o spec `security-headers`.
 
-**Nota de `img-src`:** `lh3.googleusercontent.com` entra na lista porque o `Header` mostra o avatar do Google.
-`data:` é mantido para ícones embutidos. Nenhum outro host é autorizado.
+**Onde a CSP mora, e por que.** No `src/middleware.ts`, e não no `headers()` do `next.config.ts`. O Next só
+aplica o atributo `nonce` nos scripts dele quando encontra o valor no cabeçalho CSP da **requisição**
+(`headers['content-security-policy']` em `app-render.js`), e só o middleware vê os dois lados. Se os dois lugares
+emitissem `Content-Security-Policy`, o navegador aplicaria a interseção dos dois cabeçalhos — a mais restritiva,
+que é a que não tem nonce — e a página quebraria de novo. Os três cabeçalhos de hardening, que são estáticos,
+continuam no `next.config.ts` para valerem também no que o matcher não cobre.
+
+**Nonce por requisição, nunca reutilizado.** Reusar o valor entre respostas o deixa de ser nonce: quem lesse um
+documento poderia reutilizá-lo num script injetado depois. Por isso `gerarNonce()` é chamado a cada requisição e
+`montarCsp` exige o nonce como parâmetro — torná-lo opcional recriaria o bug na primeira chamada que o esquecesse,
+com um modo de falha (página silenciosamente sem JS) dos mais difíceis de diagnosticar.
+
+**O escopo do matcher (D1) não atrapalha.** O nonce só importa para documentos, e todo documento passa pelo
+matcher; os assets que ele exclui (`_next/static`, imagens, favicon) não recebem CSP nenhuma, o que é o correto.
 
 ### D10 — Testes de Server Actions com dependências injetadas
 
@@ -166,7 +193,16 @@ sem subir banco nem Edge Function. Testes de integração reais ficam para a su�
 
 ## Open Questions
 
-- A lista de e-mails deve ser uma tabela `allowed_emails` no banco (consultável pelo hook sem depender de env
-  do servidor Next) ou continuar como env dos dois lados? Isso muda apenas a tarefa de implementação da função
-  do hook, não os cenários de aceite — decidido na apply, com o comportamento (bloquear e-mail fora da lista)
-  já fixado no spec.
+Nenhuma aberta. A única pergunta que existia — a fonte da lista de e-mails consumida pelo hook — foi fechada
+como **D11** (tabela `public.allowed_emails`, com RLS habilitado e sem policy) ao escrever as tasks, sem
+alterar nenhum cenário de aceite: o comportamento observável (bloquear e-mail fora da lista) continua sendo o
+do spec.
+
+## Ambiente de teste
+
+As tasks de integração usam **credenciais reais**, lidas do Infisical e materializadas em `.env.local` (que
+continua no `.gitignore`) — não fixtures, porque o ciclo de OAuth do Google não fecha com valor fictício. O
+Next recebe apenas `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `ALLOWED_EMAILS`. A service
+role key **não** entra no ambiente do Next em nenhuma hipótese, e `GEMINI_API_KEY`, `GEMINI_MODEL` e `APP_ORIGIN`
+continuam secrets da Edge Function, resolvidas por `supabase secrets set`. Nenhum valor é escrito em arquivo
+versionado nem reportado em log.

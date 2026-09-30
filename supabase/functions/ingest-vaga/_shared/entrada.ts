@@ -1,7 +1,16 @@
 import { z } from 'zod';
 
-/** Limites de entrada do endpoint. Espelham os limites do domínio (Fase 1). */
-export const LIMITE_TEXTO_COLADO = 30_000;
+import { LIMITE_TEXTO_COLADO } from '@/domain/vaga';
+
+/**
+ * Limites de entrada do endpoint.
+ *
+ * Reexportados do domínio, e não definidos aqui: o valor é o mesmo que a Server Action do
+ * Next aplica antes de chamar esta função, e as duas pontas precisam ler o mesmo número.
+ * A reexportação existe para que `_shared/http.ts` e o resto da função continuem importando
+ * de onde já importavam.
+ */
+export { LIMITE_TEXTO_COLADO };
 
 export const urlSchema = z
   .string()

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LIMITE_ITEM_REQUISITO,
   LIMITE_REQUISITOS,
+  LIMITE_TEXTO_COLADO,
   LIMITE_TEXTO_CURTO,
   LIMITE_URL,
   senioridadeSchema,
@@ -145,5 +146,22 @@ describe('vagaRowSchema', () => {
     const { requisitos: _omitido, ...semRequisitos } = linha;
     expect(vagaRowSchema.safeParse(semRequisitos).success).toBe(false);
     expect(vagaRowSchema.safeParse({ ...linha, requisitos: null }).success).toBe(false);
+  });
+});
+
+describe('LIMITE_TEXTO_COLADO', () => {
+  it('vale 30.000 — o número que a Edge Function e a Server Action precisam compartilhar', () => {
+    // O valor mora no domínio de propósito (Fase 3, task 5.2): a action valida antes de
+    // chamar a função, e a função valida de novo. Se um lado mudar sozinho, o limite vira
+    // "o usuário só descobre depois do round-trip".
+    expect(LIMITE_TEXTO_COLADO).toBe(30_000);
+  });
+
+  it('é um inteiro positivo, para que o limite seja aplicável como teto de tamanho', () => {
+    // A verificação de fronteira (30.000 passa, 30.001 não) não cabe aqui: ela pertence ao
+    // schema que *aplica* o limite, e é testada junto da action em `tests/app/`.
+    // Afirmar que `'a'.repeat(N).length` é `N` só testaria o próprio JavaScript.
+    expect(Number.isInteger(LIMITE_TEXTO_COLADO)).toBe(true);
+    expect(LIMITE_TEXTO_COLADO).toBeGreaterThan(0);
   });
 });

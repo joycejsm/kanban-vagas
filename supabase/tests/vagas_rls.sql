@@ -17,6 +17,12 @@
 
 begin;
 
+-- A stack local traz o pgtap disponível, mas não instalado: sem isto, `plan()` e `is()`
+-- não existem, o psql emite erro em cada linha e o arquivo inteiro passa a reportar um único
+-- subteste — ou seja, "passa" sem verificar nada. A criação fica dentro desta transação, então
+-- o ROLLBACK do fim a desfaz.
+create extension if not exists pgtap with schema extensions;
+
 select plan(26);
 
 -- -----------------------------------------------------------------------------

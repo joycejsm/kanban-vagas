@@ -9,9 +9,13 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "supabase test db",
+    "test:funcao": "deno task --cwd supabase/functions/ingest-vaga test",
+    "verificar": "npm run typecheck && npm test && npm run test:db && npm run test:funcao"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.0",
     "next": "^16.3.7",
     "react": "^19.3.0",

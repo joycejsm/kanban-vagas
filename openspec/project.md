@@ -49,7 +49,7 @@ Edge Functions (Deno) para extração de vagas, com Google Gemini e Cheerio como
 ### Git Workflow
 
 - Uma mudança = um change do OpenSpec + commits correspondentes.
-- Não commitar segredos (`.env`, `.env.local`); `.infisical.json` é versionado, segredos não.
+- Não commitar segredos (`.env`, `.env.local`). O `.infisical.json` **também não é versionado**: fica no `.gitignore` junto com os arquivos de ambiente, e o `workspaceId` é recreated localmente quando necessário.
 
 ### Documentation
 

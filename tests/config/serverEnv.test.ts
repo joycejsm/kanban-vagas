@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ARQUIVO_AMBIENTE_LOCAL,
+  ErroConfiguracaoAllowlist,
   ErroConfiguracaoSupabase,
   VARIAVEIS_SUPABASE,
+  VARIAVEL_ALLOWED_EMAILS,
+  lerAllowlistDoServidor,
   lerConfiguracaoSupabase,
 } from '@/config/serverEnv';
 
@@ -80,5 +83,61 @@ describe('lerConfiguracaoSupabase', () => {
       'NEXT_PUBLIC_SUPABASE_URL',
       'NEXT_PUBLIC_SUPABASE_ANON_KEY',
     ]);
+  });
+});
+
+describe('lerAllowlistDoServidor', () => {
+  it('devolve a lista separada por vírgula', () => {
+    expect(lerAllowlistDoServidor({ ALLOWED_EMAILS: 'ana@exemplo.com,bruno@exemplo.com' })).toEqual([
+      'ana@exemplo.com',
+      'bruno@exemplo.com',
+    ]);
+  });
+
+  it('normaliza caixa e espaços nas pontas', () => {
+    expect(lerAllowlistDoServidor({ ALLOWED_EMAILS: '  Ana@Exemplo.COM ,  Bruno@exemplo.com  ' })).toEqual([
+      'ana@exemplo.com',
+      'bruno@exemplo.com',
+    ]);
+  });
+
+  it('deduplica a mesma entrada escrita de formas diferentes', () => {
+    expect(lerAllowlistDoServidor({ ALLOWED_EMAILS: 'ana@exemplo.com, ANA@exemplo.com' })).toEqual([
+      'ana@exemplo.com',
+    ]);
+  });
+
+  it('falha quando a variável está ausente', () => {
+    expect(() => lerAllowlistDoServidor({})).toThrow(ErroConfiguracaoAllowlist);
+    expect(() => lerAllowlistDoServidor({})).toThrow(new RegExp(VARIAVEL_ALLOWED_EMAILS));
+  });
+
+  it('trata valor vazio, só com espaços ou só com vírgulas como ausente', () => {
+    for (const valor of ['', '   ', ',', ' , , ']) {
+      expect(() => lerAllowlistDoServidor({ ALLOWED_EMAILS: valor })).toThrow(
+        ErroConfiguracaoAllowlist,
+      );
+    }
+  });
+
+  it('nomeia o .env.local e não inclui nenhum e-mail da lista na mensagem', () => {
+    let mensagem = '';
+    try {
+      lerAllowlistDoServidor({ ALLOWED_EMAILS: '   ' });
+    } catch (lancado) {
+      mensagem = (lancado as Error).message;
+    }
+
+    expect(mensagem).toContain(ARQUIVO_AMBIENTE_LOCAL);
+    expect(mensagem).toContain(VARIAVEL_ALLOWED_EMAILS);
+    expect(mensagem).not.toContain('ana@exemplo.com');
+    expect(mensagem).not.toContain('\n');
+  });
+
+  it('não deixa a lista de variáveis do Supabase incluir a allowlist', () => {
+    // A allowlist é política de acesso, não configuração do Supabase: as duas leituras
+    // continuam separadas, e `lerConfiguracaoSupabase` não passa a exigir a lista.
+    expect([...VARIAVEIS_SUPABASE]).not.toContain(VARIAVEL_ALLOWED_EMAILS);
+    expect(lerConfiguracaoSupabase(AMBAS).NEXT_PUBLIC_SUPABASE_URL).toBe(URL_VALIDA);
   });
 });
