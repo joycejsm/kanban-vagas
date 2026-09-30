@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: app (3002)",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "env": { "PORT": "3002" } },
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "group": "none"
+    },
+    {
+      "label": "test: vitest",
+      "type": "shell",
+      "command": "npm test",
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "silent" },
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "test: vitest (watch)",
+      "type": "shell",
+      "command": "npm run test:watch",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "group": "none"
+    },
+    {
+      "label": "typecheck",
+      "type": "shell",
+      "command": "npm run typecheck",
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "silent" },
+      "group": "none"
+    },
+    {
+      "label": "verificar: typecheck + vitest",
+      "detail": "Suítes que rodam sem Docker nem Deno. A de pgTAP e a da Edge Function ficam de fora de propósito.",
+      "type": "shell",
+      "command": "npm run typecheck && npm test",
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}
