@@ -9,6 +9,7 @@ import {
   falhaDeEntrada,
   falhaDeSessao,
   mapearErroIngestao,
+  MENSAGENS_DO_QUADRO,
   type FalhaIngestao,
 } from '@/app/actions/erros';
 
@@ -32,6 +33,11 @@ export interface SucessoVaga {
 
 /** Retorno de sucesso de `atualizarStatus`. Não devolve a linha, porque a UI já a tem. */
 export interface SucessoMovimentacao {
+  ok: true;
+}
+
+/** Retorno de sucesso de `removerVaga`. Também não devolve nada: o que sumiu é a própria linha. */
+export interface SucessoRemocao {
   ok: true;
 }
 
@@ -69,6 +75,29 @@ const entradaVagaSchema = z
  * `vaga` e devolveria uma falha de validação — daí o schema separado.
  */
 const respostaSucessoSchema = z.object({ vaga: vagaRowSchema });
+/** O que o formulário recebe de volta depois de cada envio. */
+export type EstadoDoFormulario = SucessoVaga | FalhaIngestao;
+
+/**
+ * Adaptador de `adicionarVaga` para o `useActionState` do React (design D9).
+ *
+ * O React chama a ação do formulário como `(estadoAnterior, formData)`, e `adicionarVaga` recebe
+ * só o `FormData`. Sem este adaptador, a action receberia o estado anterior **no lugar do
+ * formulário** e a validação de URL falharia sempre, com um "informe a URL" para quem tinha
+ * acabado de informar a URL.
+ *
+ * O estado anterior é descartado de propósito: o formulário não precisa do que aconteceu antes,
+ * e descartá-lo é o que impede que ele vire uma segunda entrada pública da função.
+ *
+ * Continua sendo uma Server Action de verdade — o módulo é `'use server'` —, então a extração
+ * roda no servidor e nenhum dado de ambiente chega ao navegador por este caminho.
+ */
+export async function adicionarVagaComEstado(
+  _anterior: EstadoDoFormulario | null,
+  formData: FormData,
+): Promise<EstadoDoFormulario> {
+  return adicionarVaga(formData);
+}
 
 /** Leitura de um campo do `FormData`, colapsando ausente, arquivo e string vazia em `undefined`. */
 function campo(formData: FormData, nome: string): string | undefined {
@@ -198,7 +227,7 @@ export async function atualizarStatus(
     const atualizada = await service.atualizarStatus(vagaId, novoStatus, ordem);
 
     if (atualizada === null) {
-      return { ok: false, code: 'erro', mensagem: 'Vaga não encontrada.' };
+      return vagaNaoEncontrada();
     }
 
     return { ok: true };
@@ -209,9 +238,86 @@ export async function atualizarStatus(
     return {
       ok: false,
       code: 'erro',
-      mensagem: 'Não foi possível mover a vaga. Tente novamente.',
+      mensagem: MENSAGENS_DO_QUADRO.moverFalhou,
     };
   }
+}
+
+/**
+ * Entrada de `removerVaga`.
+ *
+ * Só o identificador, e `.strict()` pelo mesmo motivo de `atualizarStatus`: um `user_id` no
+ * payload tem que ser falha de validação, e não um campo que o schema aceita e o código ignora.
+ */
+const entradaRemocaoSchema = z
+  .object({
+    vagaId: z.string({ invalid_type_error: 'Identificador de vaga inválido.' }).uuid('Identificador de vaga inválido.'),
+  })
+  .strict();
+
+/**
+ * Remove a vaga do usuário autenticado.
+ *
+ * É a terceira action do quadro e repete a ordem de barreiras das outras duas (design D5):
+ * valida a entrada, resolve a sessão com `getUser()`, e só então apaga a linha pelo serviço,
+ * com o cliente que carrega o JWT da requisição. O RLS é quem autoriza a remoção, não um
+ * privilégio (invariante 2), e o dono da linha é o banco (invariante 3).
+ *
+ * **Difere de `atualizarStatus` em um ponto: revalida `/`.** A movimentação é otimista porque um
+ * gesto pode disparar vários updates e cada revalidação seria um re-render do quadro inteiro.
+ * A remoção não tem por que ser: o card desaparece por conta própria, o custo é uma leitura, e
+ * sem a revalidação um recarregamento da página mostraria de novo o que a pessoa acabou de apagar.
+ *
+ * `removerVaga` devolvendo `false` significa que nenhuma linha foi removida, e o RLS é
+ * deliberadamente mudo sobre o motivo: id inexistente e vaga de outro usuário chegam aqui
+ * indistintos. A resposta é a mesma nos dois casos, e é a mesma de `atualizarStatus` — confirmar
+ * que um identificador alheio existe é um oráculo de enumeração (design D7).
+ */
+export async function removerVaga(entrada: unknown): Promise<SucessoRemocao | FalhaIngestao> {
+  const validado = entradaRemocaoSchema.safeParse(entrada);
+  if (!validado.success) {
+    return falhaDeEntrada(primeiraMensagem(validado.error));
+  }
+
+  const deps = dependencias();
+  const cliente = await deps.criarClienteSupabase();
+  const sessao = await resolverSessao(cliente);
+
+  if (sessao === null) {
+    return falhaDeSessao();
+  }
+
+  try {
+    const removida = await deps.criarVagaService(cliente).removerVaga(validado.data.vagaId);
+
+    if (!removida) {
+      return vagaNaoEncontrada();
+    }
+
+    deps.revalidarCaminho('/');
+
+    return { ok: true };
+  } catch {
+    // Como em `atualizarStatus`: o `VagaService` já registrou a falha com operação e SQLSTATE,
+    // e aqui sobra só a tradução para a tela, que é sempre a mesma.
+    return {
+      ok: false,
+      code: 'erro',
+      mensagem: MENSAGENS_DO_QUADRO.removerFalhou,
+    };
+  }
+}
+
+/**
+ * A resposta de "não achei a vaga", em um lugar só.
+ *
+ * Compartilhada com `atualizarStatus` de propósito: os dois casos precisam ser o **mesmo**
+ * objeto, e comparar os dois retornos num teste é o que prova isso. Duas frases parecidas em
+ * dois pontos do arquivo divergem na próxima edição, e a divergência passa despercebida porque
+ * nenhuma delas está errada sozinha.
+ */
+function vagaNaoEncontrada(): FalhaIngestao {
+  return { ok: false, code: 'erro', mensagem: MENSAGENS_DO_QUADRO.naoEncontrada };
 }
 
 /** Cliente reduzido ao que a resolução de sessão consome. */

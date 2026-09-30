@@ -1,12 +1,14 @@
 # Handoff — Kanban de Vagas
 
-Estado em 2026-09-30, ao fim da sessão que arquivou as changes do scaffold do app e da autenticação
-(Server Actions), promovendo 6 specs a `openspec/specs/`.
+Estado em 2026-09-30, ao fim da sessão que implementou a **Fase 4** (`add-kanban-ui`): a interface do quadro
+com cadastro por URL, movimentação entre colunas e remoção. A change está com as 26 tasks concluídas e
+**ainda não arquivada**; os specs `kanban-board` e o delta de `vaga-server-actions` só entram em
+`openspec/specs/` no arquivamento.
 
 ## Onde o repositório está
 
-Fases 1, 2 e 3 implementadas. `main` com o código da Fase 3 em `c7d25b2`; o archive das changes e a
-promoção das specs entram no commit desta sessão.
+Fases 1 a 4 implementadas. `main` com o código da Fase 3 em `c7d25b2`; a Fase 4 entra no commit desta
+sessão, ainda sem arquivamento.
 
 | Change | Estado |
 |---|---|
@@ -15,74 +17,115 @@ promoção das specs entram no commit desta sessão.
 | `sync-fase2-contract-into-vaga-specs` | arquivada (2026-09-29) |
 | `add-nextjs-app-scaffold` | arquivada (2026-09-30), 17/17 |
 | `add-nextjs-auth-and-server-actions` | arquivada (2026-09-30), 39/40 — falta a 9.4 |
-| `add-kanban-ui` | ativa e **vazia**: nenhum artefato |
+| `add-kanban-ui` | **implementada**, 26/26 — aguardando arquivamento |
 
-`openspec/specs/` tem 13 capabilities. As 6 promovidas nesta sessão: `app-scaffold`, `auth-routing`,
-`auth-callback`, `access-allowlist`, `security-headers` e `vaga-server-actions`.
+`openspec/specs/` tem 13 capabilities. A Fase 4 acrescenta a **`kanban-board`** e um delta de
+`vaga-server-actions` (a action `removerVaga`), os dois em `openspec/changes/add-kanban-ui/specs/` até o
+arquivamento.
 
 ## Verificação de referência
 
 | Suíte | Comando | Estado |
 |---|---|---|
 | Tipos | `npm run typecheck` | sem erros |
-| Vitest | `npm test` | 178 passed (13 arquivos) |
+| Vitest | `npm test` | **285 passed (18 arquivos)** — 178 anteriores + 107 da Fase 4 |
 | Deno | `deno task --cwd supabase/functions/ingest-vaga test` | 35 passed |
 | Deno tipos | `deno task --cwd supabase/functions/ingest-vaga check` | limpo |
 | Specs | `openspec validate --specs` | 13 passed, 0 failed |
-| RLS / allowlist (pgTAP) | `supabase test db` | **44 passed, 0 failed** (rodado contra o stack local) |
+| RLS / allowlist (pgTAP) | `infisical run --path=/nextjs -- supabase test db --linked` | **44 passed, 0 failed**, contra o **projeto remoto** |
 
-## Bloqueio atual: o estado real do banco é desconhecido
+## O que a Fase 4 entregou
 
-O `supabase` CLI foi instalado nesta sessão (2.118.0, via `npm i -g supabase`), mas **não há
-credencial para falar com o projeto**: `supabase/.temp/` não tem `project-ref` e não existe
-`SUPABASE_ACCESS_TOKEN` no ambiente. O workspace do Infisical apontado por `.infisical.json`
-(`58744729-…`) contém **uma única chave, `OPENROUTER_API_KEY`** — nenhuma das chaves do Supabase,
-apesar de a task 1.5 afirmar que as credenciais vieram de lá.
+Interface do quadro, do zero, sobre as Server Actions da Fase 3 — sem depender de biblioteca de UI nova.
 
-Consequência: **nenhuma migração foi comprovadamente aplicada no projeto real.** As três migrações
-(`vagas.sql`, `ingest_log.sql`, `allowed_emails.sql`) e os dois arquivos pgTAP
-(`vagas_rls.sql`, `auth_allowlist.sql`) nunca foram exercitados contra um banco. As tasks 4.1–4.3
-declaram verificação por `supabase db push` e `supabase test db` que **não chegou a acontecer**.
+| Módulo | Papel |
+|---|---|
+| `src/quadro/colunas.ts` | as cinco colunas, agrupamento, destinos e ordem de destino. Puro, sem React. |
+| `src/quadro/estado.ts` | projeção do card e transições (mover, reverter, remover, assinatura). Puro. |
+| `src/quadro/formulario.ts` | traduz o **código** de erro na apresentação do formulário. Puro. |
+| `src/quadro/carregarQuadro.ts` | carga das vagas no servidor, via as dependências injetadas. |
+| `src/quadro/Quadro.tsx` | Client Component: colunas, cards, estado otimista. |
+| `src/quadro/FormularioNovaVaga.tsx` | Client Component: campo de URL + texto colado de segunda tentativa. |
 
-Isso é o que torna a 9.4 enganosa se ela for lida sozinha: o callback do Next aplica a allowlist no
-login e pode passar, **sem que a segunda camada (hook do banco) exista**. Para considerar a barreira
-completa, rode `supabase db push` e `supabase test db` antes.
+**Três decisões que valem para quem mexer nisto:**
 
-### O que o stack local já provou (e o que ele não prova)
+1. **`MENSAGENS_DO_QUADRO` em `acoes/erros.ts`.** As frases de `atualizarStatus` e `removerVaga` não são
+   de ingestão e nunca estiveram em `MENSAGENS`, que é o vocabulário dos status HTTP da Edge Function.
+   Estavam duplicadas como literais em dois pontos; agora há um conjunto fechado, e um teste compara os
+   retornos das duas actions com `toEqual` para garantir que "não encontrada" é literalmente a mesma
+   resposta nos dois casos (D7, oráculo de enumeração).
+2. **`paraCartoes()` é o portão de saída do banco.** Os cards são Client Components, e um Client Component
+   recebe os dados pelo payload de RSC, que é HTML. Passar a `VagaRow` inteira colocaria o `user_id` da
+   conta no HTML de `/`. A projeção descarta `user_id` e `url_normalizada`, e `render.test.ts` assere a
+   ausência dos dois no HTML entregue.
+3. **`lerConfiguracaoSupabase()` continua em `page.tsx`, fora do `try/catch` do quadro.** `carregarQuadro`
+   engole toda exceção de propósito, para que falha de consulta vire aviso em vez de tela quebrada. Mas a
+   spec `app-scaffold` exige que a ausência de variável **interrompa** a execução com
+   `ErroConfiguracaoSupabase`. Sem a chamada explícita na página, o app subiria degradado, com cinco
+   colunas vazias e um aviso, e ninguém saberia que o problema era o ambiente. **Se você mexer em
+   `carregarQuadro`, preserve essa separação.**
 
-Um stack Supabase **local** estava de pé nesta sessão (`supabase_db_kanban-vagas` e mais nove
-containers). Ele tem as 3 migrações aplicadas, as 4 policies de `public.vagas` e a tabela
-`public.allowed_emails`. `supabase test db` contra ele passou com **44 asserções, 0 falhas**
-(`vagas_rls.sql` e `auth_allowlist.sql`).
+**Limite conhecido**: o quadro é renderizado no servidor e aparece inteiro sem JavaScript, mas
+**mover, remover e a revelação do campo de texto colado exigem JS**. O campo de URL e o botão de cadastro
+funcionam sem ele, porque são um `<form action>` de verdade. Está registrado no design como risco e na
+spec como cenário.
 
-O que isso fecha: os SQLs aplicam limpo, o RLS isola como a spec exige e o hook da allowlist rejeita
-e-mail fora da lista — as tasks 4.1–4.3 têm evidência. O que **não** fecha: nada disso diz respeito ao
-projeto em `https://lpibbdvxpsqqujmnqydk.supabase.co`, que segue sem banco. O `project-ref` está
-disponível (é público, sai da `NEXT_PUBLIC_SUPABASE_URL`); falta apenas a credencial de API.
+## ⚠️ Nada está commitado
 
-**Como destravar** (nunca colar token no chat — regra do projeto):
+A Fase 4 inteira está **na árvore de trabalho, sem commit**. `main` continua em `8b3f6c1`, que é o
+handoff da sessão anterior. 6 arquivos modificados, 2 diretórios novos (`src/quadro/`, `tests/quadro/`) e
+5 artefatos de change.
 
-1. `supabase login` em um terminal interativo do próprio usuário, ou
-2. gravar `SUPABASE_ACCESS_TOKEN` e a senha do banco em um arquivo ignorado pelo git e apontar o
-   `supabase link` para ele.
+Perder essa sessão sem commitar perde ~2.000 linhas. A convenção do projeto é uma change do OpenSpec por
+commit, então o commit esperado seria algo como `feat(quadro): Fase 4 com cadastro por URL, movimentação e remoção`.
+Nenhum arquivo de ambiente ou `.infisical.json` está no diff — o `.gitignore` cobre os dois, e o diff
+confirma isso.
 
-Depois: `supabase link --project-ref <ref>` → `supabase db push` → `supabase test db`.
+**Correção de um erro do handoff anterior**: ele afirmava que o workspace do Infisical continha apenas
+`OPENROUTER_API_KEY` e que "nenhuma credencial do Supabase existe lá". Isso era leitura do **path raiz**.
+O path que este projeto usa, `/nextjs`, tem quatro chaves — `ALLOWED_EMAILS`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_DB_PASSWORD` — e é por ele que o `supabase test db --linked`
+consegue falar com o banco. **Não repita a investigação**: as credenciais estão lá.
+
+Para listar chaves sem expor valor (a lição do incidente abaixo):
+
+```
+infisical export --path=/nextjs --format=json | jq -r '.[].key'
+```
+
+## O bloqueio do banco foi fechado
+
+Na sessão anterior, `supabase/.temp/` não tinha `project-ref` e nenhuma credencial de API existia, o que
+deixava RLS e hook da allowlist como código não verificado. **Isso foi resolvido**: login, `link` e
+`db push` feitos, e as três migrações (`vagas.sql`, `ingest_log.sql`, `allowed_emails.sql`) estão na nuvem.
+
+Com Infisical injetando o ambiente, o estado real do banco foi verificado pela primeira vez:
+
+```
+infisical run --path=/nextjs -- supabase test db --linked
+→ Files=2, Tests=44, All tests successful. Result: PASS
+```
+
+As 44 asserções pgTAP (`vagas_rls.sql` e `auth_allowlist.sql`) passaram **contra o projeto remoto**, e não
+contra o stack local. O que antes era evidência local agora é evidência do banco de produção. Os 285
+testes do vitest, os 35 do Deno e o typecheck continuam verdes.
+
+**O que ainda é passo manual**: ativar o hook *Before User Created* no painel. Sem ele, a segunda camada
+da allowlist não existe, mesmo com a tabela e a função aplicadas. A task 9.4 da Fase 3 (ciclo real de login
+no navegador) continua em aberto e archivada como `[ ]`.
 
 ## O que falta resolver, em ordem
 
-1. **Estado do banco de verdade** — `supabase link`, `supabase db push`, `supabase test db`
-   (item anterior). Sem isso, RLS e hook da allowlist são código não verificado.
-2. **Task 9.4** — ciclo real de login no navegador, com as credenciais do Infisical. E-mail em
-   `ALLOWED_EMAILS` chega à raiz autenticado com sessão persistente; e-mail fora da lista é
-   encerrado no callback e cai em `/login?erro=nao_autorizado`. Remover a sessão de teste do usuário
-   não autorizado ao final. É a única task em aberto da Fase 3, e ela está arquivada como `[ ]` em
-   `openspec/changes/archive/2026-09-30-add-nextjs-auth-and-server-actions/tasks.md:66`.
-3. **Ativar o hook no painel** — passo manual, documentado no README, não automatizável. Sem ele, a
-   segunda camada da allowlist não existe mesmo com a tabela aplicada.
-4. **Fase 4** — `opsx propose add-kanban-ui`. Consome a spec de "Posição de entrada da vaga no quadro"
-   em `vaga-persistence`.
+1. **Arquivar a `add-kanban-ui`** — as 26 tasks estão feitas e a change valida; falta
+   `/opsx-archive`, que promove `kanban-board` e o delta de `vaga-server-actions` às specs.
+2. **Task 9.3** — ativar o hook *Before User Created* no painel. Passo manual, sem automação possível.
+3. **Task 9.4** — ciclo real de login no navegador, com as credenciais do Infisical. E-mail em
+   `ALLOWED_EMAILS` deve chegar à raiz autenticado; e-mail fora da lista, a `/login?erro=nao_autorizado`.
+4. **Fase 5 (candidata)** — drag-and-drop com `@dnd-kit`. A decisão D1 do design adiuda isso de forma
+   puramente aditiva: `ordem` já é persistida, `listarVagas` já ordena por `status, ordem, created_at`, e
+   nenhuma Server Action muda de assinatura. Trocar o `<select>` por um sensor não toca banco nem spec.
 
-## Correção de spec feita nesta sessão — leia antes de mexer na CSP
+## Correção de spec feita na sessão da Fase 3 — leia antes de mexer na CSP
 
 O delta de `security-headers` e o título do D9 no `design.md` estavam **para trás do código**:
 descreviam `script-src 'self'` sem `unsafe-eval`, enquanto `src/config/csp.ts` emite
@@ -95,11 +138,11 @@ quebra real). O que estava desatualizado era o texto do requisito, os cenários 
 agora diz: nonce por resposta, nunca reutilizado; `'unsafe-inline'` proibido sempre;
 `'unsafe-eval'` ausente em produção.
 
-**Quem for mexer na CSP deve ler o cabeçalho de `src/config/csp.ts` antes do spec** — o comentário
+**Quem mexer na CSP deve ler o cabeçalho de `src/config/csp.ts` antes do spec** — o comentário
 longo ali documenta três armadilhas (o `InvariantError` do App Router, o hash estático que não serve
 para *flight payload*, e o `eval()` do React de dev) que o spec não reexplica.
 
-## Incidente de segredo nesta sessão
+## Incidente de segredo na sessão da Fase 3 (ainda não rotacionado)
 
 Ao listar o Infisical com `infisical secrets`, o CLI imprimiu o **valor** de
 `OPENROUTER_API_KEY` em texto claro no terminal, e ele ficou registrado na transcrição da sessão.
@@ -116,7 +159,13 @@ de token ou e-mail do projeto foi reportado.
 4. **O `next build` reinjecta `allowJs: true` no `tsconfig.json` a cada build.** É inerte (o
    `include` não cobre nenhum `.js`) e o arquivo fica estável entre builds.
 5. **O vitest só coleta `tests/**/*.test.ts`** — não `.tsx`. Testes com JSX precisam ir para fora
-   desse glob, ou o glob ser ampliado.
+   desse glob, ou o glob ser ampliado. **Mas o glob limita quais arquivos são *coletados*, não o que
+   pode ser *importado***: um teste `.ts` pode importar um componente `.tsx` e renderizá-lo com
+   `createElement` + `renderToStaticMarkup` do `react-dom/server`. É assim que `tests/quadro/render.test.ts`
+   assere o HTML do quadro (colunas, contagens, card, link, rótulos, ausência de `user_id`) sem jsdom.
+   Chamar o componente direto como função — `Quadro({ cartoes })` — falha com "Cannot read properties of
+   null (reading 'useState')", porque o dispatcher do React não está montado fora de um render.
+   O que segue fora de alcance é o que precisa de DOM: clicar, responder ao `confirm()`, observar transição.
 6. **`tsc --noEmit` não cobre `supabase/functions/`** (está no `exclude`). Código Deno só é
    validado por `deno check`.
 7. **A 9.4 não é verificável em CI.** É o ciclo OAuth real; os testes cobrem o comportamento por

@@ -18,6 +18,28 @@ export type CodigoErroIngestao =
   | 'sessao_expirada'
   | 'erro';
 
+/**
+ * Mensagens das actions do quadro, que **não** vêm da Edge Function.
+ *
+ * `MENSAGENS` acima é o vocabulário da ingestão: cada entrada corresponde a um status HTTP da
+ * função. Estas são as das actions que falam com o Postgres — `atualizarStatus` e `removerVaga` —
+ * e por isso vivem em um conjunto separado, com a mesma disciplina: conjunto fechado, escrito uma
+ * vez e comparado por teste.
+ *
+ * Elas não entram em `MENSAGENS` porque não são erros de ingestão. Misturar os dois vocabulários
+ * faria o leitor procurar um status HTTP por trás de "Vaga não encontrada.", que não tem nenhum —
+ * e faria `MENSAGENS` crescer com frases que nenhum `mapearErroIngestao` pode devolver.
+ *
+ * `naoEncontrada` é compartilhada pelas duas actions **de propósito**: confirmar que um
+ * identificador alheio existe é um oráculo de enumeração, e a defesa é que as duas digam
+ * exatamente a mesma frase (design D7).
+ */
+export const MENSAGENS_DO_QUADRO = {
+  naoEncontrada: 'Vaga não encontrada.',
+  moverFalhou: 'Não foi possível mover a vaga. Tente novamente.',
+  removerFalhou: 'Não foi possível remover a vaga. Tente novamente.',
+} as const;
+
 /** Retorno de falha de uma action de ingestão. Espelha o `{ ok, ... }` de D5. */
 export interface FalhaIngestao {
   ok: false;

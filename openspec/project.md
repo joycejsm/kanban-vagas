@@ -10,7 +10,8 @@ registrar notas e acompanhar a evolução da candidatura.
 
 ## Tech Stack
 
-- **Frontend:** Next.js (App Router), React, TypeScript strict, Tailwind CSS, @dnd-kit.
+- **Frontend:** Next.js (App Router), React, TypeScript strict, Tailwind CSS. A movimentação entre colunas é
+  por seletor nativo, sem biblioteca de arrastar-e-soltar — ver a decisão D1 de `add-kanban-ui`.
 - **Backend:** Supabase (Postgres + Auth com Google OAuth + Edge Functions em Deno). Tudo que puder rodar em
   Edge Function roda lá; o Next.js cuida só de middleware, Server Actions e UI.
 - **Validação:** Zod, com schemas compartilhados entre frontend e Edge Functions.
@@ -37,7 +38,7 @@ Edge Functions (Deno) para extração de vagas, com Google Gemini e Cheerio como
 - TypeScript strict: sem `any` implícito, sem `!` sem justificativa, `unknown` na fronteira de dados externos.
 - Schemas Zod compartilhados entre frontend e Edge Functions (fonte única de verdade de validação).
 - Componentes Next.js em Server Components por padrão; `"use client"` apenas onde há interação/estado
-  (Kanban com @dnd-kit, formulários de diálogo).
+  (quadro Kanban e formulário de cadastro, que precisa de estado e de `useActionState`).
 - Server Actions nunca chamam a service role; usam o cliente com o JWT do usuário.
 
 ### Testing Requirements
