@@ -29,7 +29,7 @@ promoção das specs entram no commit desta sessão.
 | Deno | `deno task --cwd supabase/functions/ingest-vaga test` | 35 passed |
 | Deno tipos | `deno task --cwd supabase/functions/ingest-vaga check` | limpo |
 | Specs | `openspec validate --specs` | 13 passed, 0 failed |
-| RLS / allowlist (pgTAP) | `supabase test db` | **nunca rodado** — ver "Bloqueio" abaixo |
+| RLS / allowlist (pgTAP) | `supabase test db` | **44 passed, 0 failed** (rodado contra o stack local) |
 
 ## Bloqueio atual: o estado real do banco é desconhecido
 
@@ -47,6 +47,18 @@ declaram verificação por `supabase db push` e `supabase test db` que **não ch
 Isso é o que torna a 9.4 enganosa se ela for lida sozinha: o callback do Next aplica a allowlist no
 login e pode passar, **sem que a segunda camada (hook do banco) exista**. Para considerar a barreira
 completa, rode `supabase db push` e `supabase test db` antes.
+
+### O que o stack local já provou (e o que ele não prova)
+
+Um stack Supabase **local** estava de pé nesta sessão (`supabase_db_kanban-vagas` e mais nove
+containers). Ele tem as 3 migrações aplicadas, as 4 policies de `public.vagas` e a tabela
+`public.allowed_emails`. `supabase test db` contra ele passou com **44 asserções, 0 falhas**
+(`vagas_rls.sql` e `auth_allowlist.sql`).
+
+O que isso fecha: os SQLs aplicam limpo, o RLS isola como a spec exige e o hook da allowlist rejeita
+e-mail fora da lista — as tasks 4.1–4.3 têm evidência. O que **não** fecha: nada disso diz respeito ao
+projeto em `https://lpibbdvxpsqqujmnqydk.supabase.co`, que segue sem banco. O `project-ref` está
+disponível (é público, sai da `NEXT_PUBLIC_SUPABASE_URL`); falta apenas a credencial de API.
 
 **Como destravar** (nunca colar token no chat — regra do projeto):
 
