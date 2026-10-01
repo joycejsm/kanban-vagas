@@ -35,24 +35,32 @@ export function FormularioNovaVaga() {
     }
   }, [visao.deveLimpar]);
 
-  const corDaMensagem =
-    visao.aparencia === 'aviso' ? 'text-amber-800' : 'text-red-700';
+  // O `aviso` e o `erro` diferem em cor, e a escolha fica num objeto em vez de uma interpolação
+  // de classe: `text-${aparencia}` não entraria no CSS, pela mesma razão que o
+  // `quadro/aparencia.ts` documente.
+  const tomDaMensagem =
+    visao.aparencia === 'aviso' ? 'text-barro' : 'text-terra';
 
   return (
     <section
       id="nova-vaga"
       aria-labelledby="nova-vaga-titulo"
-      className="rounded border border-neutral-200 bg-white p-4"
+      className="rounded-sm border border-traco bg-papel"
     >
-      <h2 id="nova-vaga-titulo" className="text-sm font-semibold">
-        Adicionar vaga pela URL
-      </h2>
+      <header className="border-b border-traco px-4 py-3">
+        <h2
+          id="nova-vaga-titulo"
+          className="font-dados text-[11px] font-medium uppercase tracking-[0.14em] text-ambar"
+        >
+          Nova vaga
+        </h2>
+      </header>
 
-      <form ref={formulario} action={enviar} className="mt-3 flex flex-col gap-3">
+      <form ref={formulario} action={enviar} className="flex flex-col gap-3 p-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end">
           <div className="flex flex-1 flex-col gap-1">
-            <label htmlFor="url" className="text-xs text-neutral-600">
-              Link da vaga
+            <label htmlFor="url" className="font-dados text-[11px] text-tinta-fraca">
+              link da vaga
             </label>
             <input
               id="url"
@@ -62,14 +70,14 @@ export function FormularioNovaVaga() {
               maxLength={2048}
               placeholder="https://"
               autoComplete="off"
-              className="rounded border border-neutral-300 px-3 py-2 text-sm"
+              className="campo font-dados"
             />
           </div>
 
           <button
             type="submit"
             disabled={pendente}
-            className="rounded bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-sm border border-ambar/50 bg-ambar-fundo px-4 py-2 font-dados text-xs font-medium text-ambar transition-colors hover:bg-ambar hover:text-tinta disabled:opacity-50"
           >
             {pendente ? 'Buscando dados…' : 'Adicionar'}
           </button>
@@ -80,21 +88,21 @@ export function FormularioNovaVaga() {
             ninguém preenche. */}
         {visao.mostrarCampoDeTexto && (
           <div className="flex flex-col gap-1">
-            <label htmlFor="texto" className="text-xs text-neutral-600">
-              Cole o texto do anúncio para eu tentar de novo
+            <label htmlFor="texto" className="font-dados text-[11px] text-tinta-fraca">
+              cole o texto do anúncio para eu tentar de novo
             </label>
             <textarea
               id="texto"
               name="texto"
               rows={4}
               maxLength={30000}
-              className="rounded border border-neutral-300 px-3 py-2 text-sm"
+              className="campo resize-y"
             />
           </div>
         )}
 
         {visao.mensagem !== null && (
-          <p role="alert" className={`text-sm ${corDaMensagem}`}>
+          <p role="alert" className={`font-corpo text-sm ${tomDaMensagem}`}>
             {visao.mensagem}
           </p>
         )}

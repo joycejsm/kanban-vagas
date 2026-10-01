@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import { atualizarStatus, removerVaga } from '@/app/actions/vagas';
 import { type StatusVaga } from '@/domain/vaga';
 import { destinosPossiveis, rotuloDoStatus } from '@/quadro/colunas';
+import { fileteDaColuna, fundoDaColuna, textoDaColuna } from '@/quadro/aparencia';
 import {
   assinaturaDoQuadro,
   colunasDoQuadro,
@@ -146,46 +147,101 @@ export function Quadro({ cartoes: iniciais }: Props) {
       {erro !== null && (
         <p
           role="alert"
-          className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          className="rounded-sm border border-terra/40 bg-terra-fundo px-3 py-2 text-sm text-terra"
         >
           {erro}
         </p>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
         {colunas.map((coluna) => (
-          <section
+          <Coluna
             key={coluna.status}
-            aria-labelledby={`coluna-${coluna.status}`}
-            className="flex min-h-32 flex-col gap-2 rounded bg-neutral-100 p-3"
-          >
-            <header className="flex items-baseline justify-between gap-2">
-              <h2 id={`coluna-${coluna.status}`} className="text-sm font-semibold">
-                {coluna.rotulo}
-              </h2>
-              <span className="text-xs text-neutral-500">{coluna.vagas.length}</span>
-            </header>
-
-            {/* Coluna vazia continua na tela, com a contagem em zero: é ela que convida a mover
-                algo para lá. */}
-            {coluna.vagas.length === 0 && (
-              <p className="text-xs text-neutral-400">Nenhuma vaga.</p>
-            )}
-
-            {coluna.vagas.map((cartao) => (
-              <Cartao
-                key={cartao.id}
-                cartao={cartao}
-                ocupado={emTransicao || emMovimento?.vagaId === cartao.id}
-                emRemocao={emRemocao === cartao.id}
-                aoMover={moverPara}
-                aoRemover={removerVagaDoQuadro}
-              />
-            ))}
-          </section>
+            status={coluna.status}
+            rotulo={coluna.rotulo}
+            cartoes={coluna.vagas}
+            ocupado={emTransicao}
+            vagaEmMovimento={emMovimento?.vagaId ?? null}
+            vagaEmRemocao={emRemocao}
+            aoMover={moverPara}
+            aoRemover={removerVagaDoQuadro}
+          />
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Uma coluna: a barra de acento, o cabeçalho, a contagem e os cards.
+ *
+ * Virou um componente próprio por dois motivos práticos. O primeiro é o `key`: o cabeçalho com a
+ * contagem precisa reagir a cada card que entra e sai, e com as cinco colunas num único elemento
+ * o React reconcilia a coluna inteira — work isso que não é de ninguém. O segundo é a cor: a
+ * barra, o número e o anel do card leem o mesmo token, e ler de um lugar só é o que impede que um
+ * dos três fique para trás quando a paleta mudar.
+ */
+function Coluna({
+  status,
+  rotulo,
+  cartoes,
+  ocupado,
+  vagaEmMovimento,
+  vagaEmRemocao,
+  aoMover,
+  aoRemover,
+}: {
+  status: StatusVaga;
+  rotulo: string;
+  cartoes: CartaoDeVaga[];
+  ocupado: boolean;
+  vagaEmMovimento: string | null;
+  vagaEmRemocao: string | null;
+  aoMover: (vagaId: string, destino: StatusVaga) => void;
+  aoRemover: (vagaId: string) => void;
+}) {
+  return (
+    <section
+      aria-labelledby={`coluna-${status}`}
+      className="flex min-h-32 flex-col rounded-sm border border-traco bg-papel"
+    >
+      {/* A barra é a cor da coluna em 3px: o único elemento que identifica a coluna sem texto,
+          e o mesmo que o anel do card usa quando ele muda de lugar. */}
+      <div className={`h-[3px] w-full rounded-t-sm ${fundoDaColuna(status)}`} />
+
+      <header className="flex items-baseline justify-between gap-2 border-b border-traco px-3 py-2">
+        <h2
+          id={`coluna-${status}`}
+          className={`font-dados text-[11px] font-medium uppercase tracking-[0.14em] ${textoDaColuna(status)}`}
+        >
+          {rotulo}
+        </h2>
+        {/* A contagem com zero à esquerda é o que dá cara de ficha, e alinha as unidades — 3 e 12
+            ocupam a mesma largura que 03 e 12. */}
+        <span className="font-dados text-[11px] tabular-nums text-tinta-fraca">
+          {String(cartoes.length).padStart(2, '0')}
+        </span>
+      </header>
+
+      {/* Coluna vazia continua na tela, com a contagem em zero: é ela que convida a mover
+          algo para lá. */}
+      {cartoes.length === 0 && (
+        <p className="px-3 py-4 font-corpo text-xs italic text-tinta-fraca">Nenhuma vaga.</p>
+      )}
+
+      <div className="flex flex-col gap-2 p-2">
+        {cartoes.map((cartao) => (
+          <Cartao
+            key={cartao.id}
+            cartao={cartao}
+            ocupado={ocupado || vagaEmMovimento === cartao.id}
+            emRemocao={vagaEmRemocao === cartao.id}
+            aoMover={aoMover}
+            aoRemover={aoRemover}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -205,28 +261,53 @@ function Cartao({
 }) {
   const destinos = destinosPossiveis(cartao.status);
 
+  // A classe do card é montada em partes — filete da coluna e estado de transição — e montada por
+  // concatenação porque cada parte vem de uma decisão diferente. Um array filtrado em vez disso
+  // deixaria um espaço sobrando no atributo quando o card não estivesse em transição, e esse
+  // espaço é o tipo de coisa que só aparece quando alguém inspeciona o HTML.
+  const classesDoCard = [
+    'flex flex-col gap-2 rounded-sm border border-traco bg-papel-alto p-3',
+    fileteDaColuna(cartao.status),
+    ocupado || emRemocao ? 'opacity-60' : null,
+  ]
+    .filter((classe) => classe !== null)
+    .join(' ');
+
   return (
-    <article className="flex flex-col gap-2 rounded border border-neutral-200 bg-white p-3">
-      <h3 className="text-sm font-medium">{cartao.titulo}</h3>
-      <p className="text-xs text-neutral-600">
-        {cartao.empresa} · {cartao.senioridade}
+    /*
+     * O card é uma ficha de papel: fundo um passo acima do da coluna, borda quase apagada, e um
+     * filete de 2px na cor da coluna. O filete é o que faz o card carregar a coluna junto com
+     * ele — sem ele, um card em movimento atravessa a tela sem nenhuma pista de para onde vai.
+     */
+    <article className={classesDoCard}>
+      <h3 className="font-titulo text-[15px] leading-snug text-tinta-clara">{cartao.titulo}</h3>
+
+      {/* Empresa e senioridade em mono e separadas por um ponto: é a linha de metadados, e a
+          tipografia é o que a distingue do título sem precisar de outro peso. */}
+      <p className="font-dados text-[11px] text-tinta-media">
+        {cartao.empresa} <span className="text-tinta-fraca">·</span> {cartao.senioridade}
       </p>
 
       {/*
         O destino do link é a URL que a pessoa colou, e não a `url_normalizada` nem qualquer valor
         vindo da extração: a invariante 6 proíbe que saída de modelo vire `href`, e o `rel` sem
         `noopener` entregaria a aba nova o controle da página de origem.
+
+        A seta é `→` (U+2192) e não `↗` (U+2197) por um motivo que só aparece na tela: o subset
+        latino que o `next/font` baixa da IBM Plex Mono cobre U+2191, U+2192, U+2193 e U+2195, mas
+        **não** U+2197. A seta diagonal saía como caixa vazia — um tofu no meio do card. O glifo
+        precisa estar no `unicode-range`, não só no arquivo.
       */}
       <a
         href={cartao.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-blue-700 underline"
+        className="self-start font-dados text-[11px] text-ambar underline decoration-ambar/40 underline-offset-4 hover:decoration-ambar"
       >
-        Ver anúncio
+        Ver anúncio →
       </a>
 
-      <div className="flex items-center gap-2">
+      <div className="mt-1 flex items-center gap-2">
         <label htmlFor={`mover-${cartao.id}`} className="sr-only">
           Mover “{cartao.titulo}” para outra coluna
         </label>
@@ -240,7 +321,7 @@ function Cartao({
               aoMover(cartao.id, escolhido as StatusVaga);
             }
           }}
-          className="min-w-0 flex-1 rounded border border-neutral-300 px-1 py-1 text-xs disabled:opacity-50"
+          className="campo min-w-0 flex-1 py-1 font-dados text-[11px]"
         >
           {/*
             A primeira opção é a de repouso, e é ela que reaparece depois do movimento — é o que
@@ -259,7 +340,7 @@ function Cartao({
           type="button"
           onClick={() => aoRemover(cartao.id)}
           disabled={emRemocao}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+          className="rounded-sm border border-traco px-2 py-1 font-dados text-[11px] text-tinta-fraca transition-colors hover:border-terra/50 hover:bg-terra-fundo hover:text-terra disabled:opacity-50"
         >
           {emRemocao ? 'Removendo…' : 'Remover'}
         </button>

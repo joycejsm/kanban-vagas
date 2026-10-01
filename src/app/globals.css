@@ -1,8 +1,220 @@
 /**
- * Folha de estilos global.
+ * Folha de estilos global: a identidade visual inteira do quadro.
  *
  * A diretiva abaixo é a configuração do Tailwind v4: não há `tailwind.config.js` neste projeto.
  * A varredura de arquivos é automática a partir da raiz de estilos, e qualquer classe usada
  * em `src/app` (ou em `src/components` na Fase 4) é emitida sem configuração por arquivo.
+ *
+ * ## O que mora aqui
+ *
+ * Tudo que é **token** — cor, fonte, textura — está neste arquivo, e nenhum outro. Os
+ * componentes referenciam `bg-papel`, `text-tinta-media` e `font-dados`; nenhum deles escreve
+ * um valor hexadecimal. A razão não é estética: é o que faz a troca da paleta inteira ser uma
+ * inteira ser uma edição neste arquivo, e não uma caça em todos os componentes.
+ *
+ * ## A paleta
+ *
+ * Escura, quente e de baixo contraste entre os extremos — o oposto do branco puro com cinza
+ * neutro que o quadro tinha. A base não é preto: é um marrom quase preto (`tinta`), e o texto
+ * não é branco: é um creme (`tinta-clara`). É a diferença entre uma tela que emite luz e uma
+ * tela que parece papel sob luz baixa — que é a referência de lo-fi.
+ *
+ * Os tons de acento são propositalmente dessaturados. Nenhum vermelho de alerta, nenhum azul de
+ * link: os avisos são ocre e terracota, e o link é o mesmo âmbar do destaque, porque a página
+ * tem uma identidade e um link azul de hipertexto quebraria ela.
+ *
+ * **Contraste:** `tinta-clara` sobre `tinta` passa de 13:1 e `tinta-media` sobre `papel` de 7:1.
+ * `tinta-fraca` fica em 4.6:1 e por isso só aparece em texto secundário, nunca em texto que
+ * carrega informação sozinha — a coluna vazia e a data do card são pista, não dado.
  */
 @import 'tailwindcss';
+
+@theme {
+  /* --- Superfícies, do fundo ao elemento mais elevado --- */
+  --color-tinta: #14110d;
+  --color-papel: #1c1814;
+  --color-papel-alto: #241f19;
+  --color-papel-fundo: #2a241d;
+
+  /* --- Bordas --- */
+  --color-traco: #342d25;
+  --color-traco-forte: #4a4036;
+
+  /* --- Texto --- */
+  --color-tinta-clara: #ece4d6;
+  --color-tinta-media: #ab9f8d;
+  --color-tinta-fraca: #877c6c;
+
+  /* --- Acentos --- */
+  --color-ambar: #cfa05e;
+  --color-ambar-fundo: #2e2519;
+  --color-terra: #c9806e;
+  --color-terra-fundo: #2e1e1a;
+  --color-olive: #8ea077;
+  --color-olive-fundo: #23271d;
+  --color-barro: #cb9a55;
+
+  /* --- Acento por coluna do quadro --- */
+  --color-coluna-aplicado: #8ea077;
+  --color-coluna-entrevista: #cfa05e;
+  --color-coluna-tecnica: #8496b5;
+  --color-coluna-proposta: #d9c07a;
+  --color-coluna-rejeitado: #c07f6d;
+
+  /* --- Fontes, ligadas às variáveis que o `next/font` injeta --- */
+  --font-titulo: var(--fonte-titulo), Georgia, serif;
+  --font-corpo: var(--fonte-corpo), system-ui, sans-serif;
+  --font-dados: var(--fonte-dados), ui-monospace, monospace;
+}
+
+/*
+ * A base do documento.
+ *
+ * `color-scheme: dark` não é decoração: sem ele o navegador desenha `<select>`, `<input>` e a
+ * barra de rolagem com o widgets claros do sistema, e um `<select>` branco dentro de um quadro
+ * escuro é exatamente o que a paleta existia para evitar.
+ */
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    /*
+     * O fundo e a vinheta estão no mesmo elemento, e não um no `html` e outro no `body`: o
+     * `background-color` do `body` é opaco e pinta por cima do gradiente do `html`, que é o
+     * comportamento de fundo que o navegador estende para a tela. Se a vinheta subisse para o
+     * `html`, ela apareceria por baixo de um fundo sólido e não apareceria.
+     *
+     * O gradiente vai de um centro levemente mais claro no topo a um escurecimento forte nas
+     * bordas inferiores: papel sob uma luminária. `min-height` garante que ele cubra a tela
+     * mesmo quando o conteúdo é menor que a janela — um gradiente que acaba no meio da página
+     * denuncia a troca.
+     */
+    min-height: 100vh;
+    background-color: var(--color-tinta);
+    background-image: radial-gradient(
+      ellipse 120% 90% at 50% 0%,
+      rgb(255 246 230 / 0.035) 0%,
+      transparent 55%,
+      rgb(0 0 0 / 0.35) 100%
+    );
+    background-attachment: fixed;
+    color: var(--color-tinta-clara);
+    font-family: var(--font-corpo);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * O contorno de foco, redefinido num só lugar.
+   *
+   * O padrão do navegador desenha o contorno da cor do texto e some no fundo escuro. Aqui ele
+   * é o âmbar do destaque, com um anel escuro por fora para continuar visível sobre o card
+   * claro e sobre o campo de foco — nenhum dos dois se resolve com uma cor só.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-ambar);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-ambar-fundo);
+    color: var(--color-tinta-clara);
+  }
+}
+
+/*
+ * A textura de papelão.
+ *
+ * É um `feTurbulence` gerado em SVG e embutido como `data:` — sem requisição, sem arquivo, sem
+ * origem externa na CSP. A opacidade é baixa de propósito (3%): grão que se vê é ruído, e ruído
+ * compete com o texto. O pseudo-elemento é fixo e vem acima de tudo com `pointer-events: none`,
+ * porque textura que intercepta clique é defeito, não estilo.
+ *
+ * A vinheta não mora aqui: ela é o `background-image` do `body`, na camada de base. Somar as
+ * duas neste pseudo-elemento daria ao grão a mesma opacidade da vinheta, e o ruído apareceria
+ * justamente nas bordas, que é onde a vinheta é mais forte.
+ */
+@layer utilities {
+  .textura-cartao {
+    position: relative;
+  }
+
+  .textura-cartao::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/*
+ * Os controles de formulário.
+ *
+ * O `<select>` é o caso difícil: ele não aceita `background-color` no WebKit sem o
+ * `appearance: none`, e sem esse hack ele aparece com o widget nativo claro por cima da
+ * paleta. A seta desenhada aqui é um `data:` SVG na cor do texto fraco.
+ *
+ * O `color: inherit` no option é o que resolve o resto: as opções de um `<select>` escuro são
+ * desenhadas pelo sistema, e sem herdar a cor do texto elas saem pretas sobre fundo escuro.
+ */
+@layer components {
+  .campo {
+    width: 100%;
+    border-radius: 0.25rem;
+    border: 1px solid var(--color-traco);
+    background-color: var(--color-papel-alto);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-tinta-clara);
+    transition: border-color 120ms ease;
+  }
+
+  .campo::placeholder {
+    color: var(--color-tinta-fraca);
+  }
+
+  .campo:hover:not(:disabled) {
+    border-color: var(--color-traco-forte);
+  }
+
+  .campo:focus {
+    border-color: var(--color-ambar);
+  }
+
+  .campo:disabled {
+    opacity: 0.5;
+  }
+
+  select.campo {
+    appearance: none;
+    padding-right: 1.75rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' stroke='%23877c6c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.625rem;
+  }
+
+  select.campo option {
+    background-color: var(--color-papel-alto);
+    color: var(--color-tinta-clara);
+  }
+}
+
+/*
+ * Barra de rolagem discreta.
+ *
+ * Sem isto o Firefox e o Chrome no macOS desenham a barra na cor padrão do sistema, clara, na
+ * borda direita de um quadro escuro.
+ */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-traco) transparent;
+  }
+}

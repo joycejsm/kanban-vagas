@@ -30,11 +30,28 @@ export default async function PaginaInicial() {
   const semVagas = ehEstadoVazio(resultado);
 
   return (
-    <main className="min-h-screen p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Kanban de Vagas</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          Cole o link de um anúncio para acompanhar a candidatura.
+    <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 p-6">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-traco pb-4">
+        <div>
+          {/*
+            O título é a Fraunces com `WONK` ligado e em itálico: é o traço mais forte da
+            identidade. Num título de produto ela grita; num cabeçalho de uso diário ela fica só
+            estranha o bastante para não parecer template.
+          */}
+          <h1 className="font-titulo text-3xl italic text-tinta-clara">Kanban de Vagas</h1>
+          <p className="mt-1 font-dados text-[11px] tracking-wide text-tinta-fraca">
+            cole o link de um anúncio para acompanhar a candidatura
+          </p>
+        </div>
+
+        {/*
+          O total à direita, em mono e com zero à esquerda, como os números das colunas: é o
+          mesmo sistema de leitura, e quem olha o cabeçalho já entende a notação sem lê-la. Fica
+          fora do `<h1>` de propósito — um total de vagas não é o assunto da página, e entra-lo
+          no título o colocaria no primeiro plano da navegação por leitor de tela.
+        */}
+        <p className="font-dados text-[11px] tabular-nums tracking-wide text-tinta-fraca">
+          {String(cartoes.length).padStart(2, '0')} vaga{cartoes.length === 1 ? '' : 's'}
         </p>
       </header>
 
@@ -44,7 +61,7 @@ export default async function PaginaInicial() {
         {resultado.aviso !== null && (
           <p
             role="alert"
-            className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+            className="rounded-sm border border-barro/40 bg-ambar-fundo px-3 py-2 font-corpo text-sm text-barro"
           >
             {resultado.aviso}
           </p>
@@ -54,9 +71,12 @@ export default async function PaginaInicial() {
             falha ele seria mentira: a pessoa veria "cadastre a primeira vaga" sem saber que
             existe uma segunda. */}
         {semVagas && (
-          <p className="text-sm text-neutral-600">
+          <p className="font-corpo text-sm text-tinta-media">
             Nenhuma vaga ainda.{' '}
-            <a href="#nova-vaga" className="text-blue-700 underline">
+            <a
+              href="#nova-vaga"
+              className="text-ambar underline decoration-ambar/40 underline-offset-4 hover:decoration-ambar"
+            >
               Cadastre a primeira pelo link do anúncio
             </a>
             .

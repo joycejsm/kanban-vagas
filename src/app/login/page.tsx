@@ -44,22 +44,24 @@ export default async function PaginaDeLogin({ searchParams }: Props) {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-2xl font-semibold">Kanban de Vagas</h1>
+      <div className="w-full max-w-sm rounded-sm border border-traco bg-papel px-6 py-8 text-center">
+        <h1 className="font-titulo text-2xl italic text-tinta-clara">Kanban de Vagas</h1>
 
-      {mensagem !== null && (
-        <p role="alert" className="max-w-sm text-center text-sm text-red-700">
-          {mensagem}
-        </p>
-      )}
+        {mensagem !== null && (
+          <p role="alert" className="mt-4 font-corpo text-sm text-terra">
+            {mensagem}
+          </p>
+        )}
 
-      <form action={entrarComGoogle.bind(null, destino ?? null)}>
-        <button
-          type="submit"
-          className="rounded border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50"
-        >
-          Entrar com Google
-        </button>
-      </form>
+        <form action={entrarComGoogle.bind(null, destino ?? null)} className="mt-6">
+          <button
+            type="submit"
+            className="w-full rounded-sm border border-ambar/50 bg-ambar-fundo px-4 py-2 font-dados text-xs font-medium text-ambar transition-colors hover:bg-ambar hover:text-tinta"
+          >
+            Entrar com Google
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

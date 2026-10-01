@@ -81,9 +81,11 @@ describe('renderização — colunas (task 4.3)', () => {
       linha({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', status: 'aplicado' }),
     ]);
 
-    // Duas vagas em "Aplicado" e nenhuma nas outras quatro: um 2 e quatro 0.
-    expect(html).toContain('>2<');
-    expect(html.match(/>0</g)).toHaveLength(4);
+    // Duas vagas em "Aplicado" e nenhuma nas outras quatro. A contagem sai com zero à esquerda —
+    // é a notação de ficha que a coluna usa —, e a intenção do teste é a mesma de sempre: um 2 e
+    // quatro 0, um por coluna. Ela se cumpre em `>02<` e `>00<`.
+    expect(html).toContain('>02<');
+    expect(html.match(/>00</g)).toHaveLength(4);
   });
 });
 
