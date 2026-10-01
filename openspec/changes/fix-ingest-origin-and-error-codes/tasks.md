@@ -30,7 +30,7 @@
 
 - [x] 3.1 Rodar a verificação completa (`npm run verificar`) e confirmar typecheck, vitest, pgTAP e testes da
   função verdes
-- [ ] 3.2 Implantar **a função primeiro** (`scripts/configurar-edge-function.sh`) e só depois subir o app, para
+- [x] 3.2 Implantar **a função primeiro** (`scripts/configurar-edge-function.sh`) e só depois subir o app, para
   que nenhuma janela tenha app novo contra função antiga; conferir com `curl` na rota da função que uma
   requisição sem `Origin` e sem token responde `401` e não `403`
 - [ ] 3.3 Abrir `http://localhost:3002`, colar uma URL de vaga real e confirmar que a vaga entra no quadro — a
