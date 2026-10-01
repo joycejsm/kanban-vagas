@@ -13,6 +13,7 @@ import { lerEnvPadrao, normalizarEmail, origemPermitida, type EnvConfig } from '
 import { corpoIngestaoSchema, type CorpoIngestao } from './entrada.ts';
 import { ERROS, type ErroPipeline } from './erros.ts';
 import { hostDaUrl, lerCorpo, respostaErroHttp, respostaJson, registrarFalha } from './http.ts';
+import type { Janelas } from './supabase.ts';
 
 export const LIMITE_POR_HORA = 20;
 export const LIMITE_POR_DIA = 100;
@@ -25,18 +26,28 @@ export interface Dependencias {
   config: EnvConfig;
   /** Valida o token e devolve o usuário. Nunca lança: devolve `null`. */
   autenticar: (token: string | null) => Promise<UsuarioAutenticado | null>;
-  /** Registra a tentativa e conta as janelas. */
-  registrarTentativa: (host: string) => Promise<{ hora: number; dia: number }>;
+  /** Registra a tentativa e devolve o `id` da linha criada. */
+  registrarTentativa: (host: string) => Promise<{ id: string }>;
+  /** Conta as janelas já com o registro corrente incluído. */
+  contarJanelas: () => Promise<Janelas>;
   /** Busca a página aplicando todas as regras de URL e de fetch. */
   buscar: (url: string) => Promise<string>;
   /** Extrai os campos da vaga a partir do HTML (ou do texto colado). */
   extrair: (conteudo: string, url: string) => Promise<unknown>;
   /** Insere a vaga com o cliente do usuário. */
   inserir: (dados: VagaCreateInput, usuarioId: string) => Promise<VagaRow>;
-  /** Atualiza o desfecho registrado na auditoria. */
-  marcarDesfecho: (resultado: 'sucesso' | 'duplicada' | 'erro') => Promise<void>;
+  /** Atualiza o desfecho no registro da tentativa, dizendo se gravou. */
+  marcarDesfecho: (id: string, resultado: ResultadoAuditoria) => Promise<{ gravado: boolean }>;
   /** Dependências do módulo de segurança, injetadas para teste. */
   url: typeof import('./urlSafety.ts');
+}
+
+/** Desfecho possível de uma tentativa registrada. */
+export type ResultadoAuditoria = 'sucesso' | 'duplicada' | 'erro';
+
+/** Registro de auditoria aberto por esta requisição. */
+export interface AuditoriaAberta {
+  id: string;
 }
 
 export interface UsuarioAutenticado {
@@ -98,15 +109,13 @@ export function etapaAllowlist(
 }
 
 /**
- * Rate limit. A tentativa é registrada antes da contagem e a contagem inclui o
- * próprio registro, para que chamadas simultâneas não escapem (design D2).
+ * Rate limit. A tentativa já foi registrada e a contagem já inclui o registro
+ * corrente, para que chamadas simultâneas não escapem (design D2).
+ *
+ * Recebe as janelas prontas e não lança: a contagem é uma etapa nomeada do
+ * pipeline, com resposta e log próprios, e não um erro inesperado.
  */
-export async function etapaRateLimit(
-  deps: Dependencias,
-  host: string,
-): Promise<ErroPipeline | null> {
-  const janela = await deps.registrarTentativa(host);
-
+export function etapaRateLimit(janela: Janelas): ErroPipeline | null {
   if (janela.hora > LIMITE_POR_HORA || janela.dia > LIMITE_POR_DIA) {
     return ERROS.limiteDeUso();
   }
@@ -202,48 +211,69 @@ export async function executarPipeline(
 
   let host = 'desconhecido';
   let usuario: UsuarioAutenticado | null = null;
-  // O desfecho da tentativa registrada só é gravado uma vez, aqui no final.
-  let auditoriaAberta = false;
+  // O registro de auditoria é criado na etapa 5 e o desfecho é gravado uma vez, no
+  // fim. A variável existe para que uma falha *depois* do registro — inclusive a
+  // própria contagem de janela — ainda feche a linha, em vez de deixá-la pendente.
+  let auditoria: AuditoriaAberta | null = null;
 
   try {
     // 1. CORS e método
     const falhaCors = etapaCors(requisicao, deps.config);
-    if (falhaCors) return responderErro(falhaCors, deps, inicio, host, usuario, false, undefined, origem);
+    if (falhaCors) return responderErro(falhaCors, deps, inicio, host, usuario, null, undefined, origem);
 
     // 2. Autenticação
     const auth = await etapaAutenticacao(requisicao, deps);
-    if (!auth.ok) return responderErro(auth.falha, deps, inicio, host, null, false, undefined, origem);
+    if (!auth.ok) return responderErro(auth.falha, deps, inicio, host, null, null, undefined, origem);
     usuario = auth.usuario;
 
     // 3. Allowlist
     const falhaAllowlist = etapaAllowlist(usuario, deps.config);
-    if (falhaAllowlist) return responderErro(falhaAllowlist, deps, inicio, host, usuario, false, undefined, origem);
+    if (falhaAllowlist) return responderErro(falhaAllowlist, deps, inicio, host, usuario, null, undefined, origem);
 
     // 4. Corpo
     const corpo = await lerCorpo(requisicao);
-    if (!corpo.ok) return responderErro(corpo.falha, deps, inicio, host, usuario, false, undefined, origem);
+    if (!corpo.ok) return responderErro(corpo.falha, deps, inicio, host, usuario, null, undefined, origem);
 
     host = hostDaUrl(corpo.dados.url);
 
-    // 5. Rate limit — antes de qualquer trabalho caro
-    const falhaLimite = await etapaRateLimit(deps, host);
-    // A tentativa foi registrada, então o desfecho precisa ser gravado.
-    auditoriaAberta = true;
-    if (falhaLimite) return responderErro(falhaLimite, deps, inicio, host, usuario, true, undefined, origem);
+    // 5. Auditoria e rate limit — antes de qualquer trabalho caro.
+    //    Isolados do `catch` geral porque a auditoria tem dois estados distintos
+    //    que o código precisa distinguir: registro que não aconteceu (nenhuma
+    //    linha para fechar) e registro que aconteceu, com a contagem recusada
+    //    pelo banco (linha existe e precisa ser fechada).
+    let janela: Janelas;
+    try {
+      auditoria = await deps.registrarTentativa(host);
+      janela = await deps.contarJanelas();
+    } catch (erro) {
+      return responderErro(
+        { ...ERROS.erroGenerico(), etapa: 'auditoria' },
+        deps,
+        inicio,
+        host,
+        usuario,
+        auditoria,
+        erro,
+        origem,
+      );
+    }
+
+    const falhaLimite = etapaRateLimit(janela);
+    if (falhaLimite) return responderErro(falhaLimite, deps, inicio, host, usuario, auditoria, undefined, origem);
 
     // 6. Conteúdo (URL + fetch)
     const conteudo = await etapaConteudo(corpo.dados, deps);
-    if (!conteudo.ok) return responderErro(conteudo.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
+    if (!conteudo.ok) return responderErro(conteudo.falha, deps, inicio, host, usuario, auditoria, undefined, origem);
 
     // 7. Extração + validação
     const extracao = await etapaExtracao(conteudo.conteudo, corpo.dados.url, deps);
-    if (!extracao.ok) return responderErro(extracao.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
+    if (!extracao.ok) return responderErro(extracao.falha, deps, inicio, host, usuario, auditoria, undefined, origem);
 
     // 8. Persistência
     const persistencia = await etapaPersistencia(extracao.dados, usuario, deps);
-    if (!persistencia.ok) return responderErro(persistencia.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
+    if (!persistencia.ok) return responderErro(persistencia.falha, deps, inicio, host, usuario, auditoria, undefined, origem);
 
-    await marcarDesfechoSilencioso(deps, 'sucesso');
+    await fecharAuditoria(deps, auditoria, 'sucesso', usuario);
     console.info(
       '[ingest-vaga] etapa=sucesso host=%s duracao_ms=%d usuario=%s',
       host,
@@ -253,7 +283,7 @@ export async function executarPipeline(
 
     return respostaJson({ vaga: persistencia.vaga }, 201, origem);
   } catch (erro) {
-    return responderErro(ERROS.erroGenerico(), deps, inicio, host, usuario, auditoriaAberta, erro, origem);
+    return responderErro(ERROS.erroGenerico(), deps, inicio, host, usuario, auditoria, erro, origem);
   }
 }
 
@@ -263,7 +293,7 @@ async function responderErro(
   inicio: number,
   host: string,
   usuario: UsuarioAutenticado | null,
-  auditoriaAberta = false,
+  auditoria: AuditoriaAberta | null,
   causa?: unknown,
   origem: string | null = null,
 ): Promise<Response> {
@@ -274,21 +304,50 @@ async function responderErro(
     origem,
     appOrigin: deps.config.appOrigin,
   });
-  // Só grava desfecho se houve registro da tentativa; falhas anteriores (CORS,
-  // auth, allowlist, corpo) acontecem antes de a auditoria existir.
-  if (auditoriaAberta) {
-    await marcarDesfechoSilencioso(deps, falha.code === 'vaga_duplicada' ? 'duplicada' : 'erro');
-  }
+  // Só grava desfecho se o registro da tentativa chegou a existir; falhas anteriores
+  // (CORS, auth, allowlist, corpo) acontecem antes da auditoria existir.
+  await fecharAuditoria(
+    deps,
+    auditoria,
+    falha.code === 'vaga_duplicada' ? 'duplicada' : 'erro',
+    usuario,
+  );
 
   return respostaErroHttp(falha, deps.config.appOrigin);
 }
 
-/** Falha na auditoria nunca derruba a resposta que o usuário recebe. */
-async function marcarDesfechoSilencioso(deps: Dependencias, resultado: 'sucesso' | 'duplicada' | 'erro') {
+/**
+ * Fecha o registro da tentativa.
+ *
+ * Falha aqui nunca derruba a resposta que o usuário recebe — a auditoria é
+ * acessória. Mas ela deixa de ser **invisível**: era neste ponto, silencioso por
+ * decisão, que a informação valia mais, e é por isso que a linha pode ter ficado
+ * `pendente` sem nenhuma pista. O efeito continua silencioso; o registro, não.
+ */
+async function fecharAuditoria(
+  deps: Dependencias,
+  auditoria: AuditoriaAberta | null,
+  resultado: ResultadoAuditoria,
+  usuario: UsuarioAutenticado | null,
+): Promise<void> {
+  if (!auditoria) return;
+
+  const quem = usuario ? usuarioTruncado(usuario.id) : 'desconhecido';
+
   try {
-    await deps.marcarDesfecho(resultado);
-  } catch {
-    // silencioso por decisão: a auditoria é acessória, o resultado do usuário não é.
+    const { gravado } = await deps.marcarDesfecho(auditoria.id, resultado);
+    if (!gravado) {
+      console.error(
+        '[ingest-vaga] etapa=auditoria codigo=desfecho-nao-encontrado usuario=%s',
+        quem,
+      );
+    }
+  } catch (erro) {
+    console.error(
+      '[ingest-vaga] etapa=auditoria codigo=%s usuario=%s',
+      sqlstate(erro) ?? 'falha-desconhecida',
+      quem,
+    );
   }
 }
 

@@ -117,7 +117,7 @@ npm run verificar         # typecheck + as três suítes abaixo, em sequência
 npm run typecheck         # tsc --noEmit
 npm test                  # vitest: domínio, serviço, scaffold, auth e actions (172 testes)
 npm run test:db           # pgTAP: 26 asserções de RLS + 18 da allowlist, no Postgres
-npm run test:funcao       # deno test da Edge Function (35 testes, 144 passos)
+npm run test:funcao       # deno test da Edge Function (39 testes, 168 passos)
 ```
 
 As suítes são separadas de propósito. `npm test` é só vitest porque é o que roda sem Docker e
@@ -159,6 +159,17 @@ CORS → autenticação → allowlist → rate limit (20/h, 100/dia) → URL + D
 
 Respostas: `201 { vaga }`, ou `{ code, message }` com `401` (sessão), `403` (origem ou e-mail), `409`
 (duplicada), `422` (URL ou extração), `429` (limite), `502`/`413`/`500` (fetch).
+
+### A chamada é servidor-para-servidor, e por isso não leva `Origin`
+
+A invocação sai de uma **Server Action** (`src/app/actions/`), não do navegador. Um `fetch` feito
+no servidor não carrega o cabeçalho `Origin` — ele não existe fora de uma navegação. Por isso
+`origemPermitida` trata origem **ausente** como cliente não-navegador, e não como recusa.
+
+**Não "corrija" isso de volta** para exigir `Origin`: a requisição real nunca vai ter o cabeçalho, e
+exigir transforma toda ingestão em `403`. A conferência por igualdade estrita continua valendo
+para quando a origem **está** presente — é o que barra um navegador em origem errada. Ver
+`fix-ingest-origin-and-error-codes`, tasks 1.1 e 1.2.
 
 ### Secrets obrigatórias
 

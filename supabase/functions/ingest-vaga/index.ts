@@ -14,7 +14,7 @@
 import { buscarPagina } from './_shared/buscar.ts';
 import { extrairVaga } from './_shared/llm.ts';
 import { extrairLdJson } from './_shared/parsing.ts';
-import { autenticarComToken, criarClientDoUsuario, inserirVaga, marcarDesfecho, registrarTentativa } from './_shared/supabase.ts';
+import { autenticarComToken, contarJanelas, criarClientDoUsuario, inserirVaga, marcarDesfecho, registrarTentativa } from './_shared/supabase.ts';
 import { lerEnvPadrao } from './_shared/env.ts';
 import { etapaExtracao, executarPipeline, type Dependencias } from './_shared/pipeline.ts';
 import { respostaErroHttp } from './_shared/http.ts';
@@ -43,6 +43,11 @@ Deno.serve(async (requisicao: Request): Promise<Response> => {
         return registrarTentativa(criarClientDoUsuario({ url: urlSupabase, anonKey: anonKey }, token), host);
       },
 
+      contarJanelas: () => {
+        if (!token) throw new Error('sem-token');
+        return contarJanelas(criarClientDoUsuario({ url: urlSupabase, anonKey: anonKey }, token));
+      },
+
       buscar: (url) => buscarPagina(url),
 
       extrair: async (conteudo, url) => {
@@ -64,10 +69,11 @@ Deno.serve(async (requisicao: Request): Promise<Response> => {
         return inserirVaga(criarClientDoUsuario({ url: urlSupabase, anonKey: anonKey }, token), dados);
       },
 
-      marcarDesfecho: async (resultado) => {
-        if (!token) return;
-        await marcarDesfecho(
+      marcarDesfecho: async (id, resultado) => {
+        if (!token) return { gravado: false };
+        return marcarDesfecho(
           criarClientDoUsuario({ url: urlSupabase, anonKey: anonKey }, token),
+          id,
           resultado,
         );
       },

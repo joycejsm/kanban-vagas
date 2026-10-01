@@ -40,8 +40,8 @@
 
 ## 4. Registro do que quebrou sem teste
 
-- [ ] 4.1 Anotar em `DEBUG-login-hook.md` que o contrato entre a Server Action e a Edge Function não era
+- [x] 4.1 Anotar em `DEBUG-login-hook.md` que o contrato entre a Server Action e a Edge Function não era
   coberto por teste de integração, e que a suíte da função e a do Next estavam ambas verdes enquanto a
   funcionalidade não funcionava
-- [ ] 4.2 Registrar no README, na seção da ingestão, que a chamada é servidor-para-servidor e por isso não
+- [x] 4.2 Registrar no README, na seção da ingestão, que a chamada é servidor-para-servidor e por isso não
   carrega `Origin`, para que a conferência de origem não seja "corrigida" de volta

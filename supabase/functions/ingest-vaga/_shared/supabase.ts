@@ -59,17 +59,30 @@ export async function autenticarComToken(
   return { id: data.user.id, email: data.user.email ?? null };
 }
 
+/** Janelas do limite de uso, em milissegundos. */
+export const JANELA_HORA_MS = 60 * 60 * 1000;
+export const JANELA_DIA_MS = 24 * 60 * 60 * 1000;
+
+export interface Janelas {
+  hora: number;
+  dia: number;
+}
+
 /**
- * Registra a tentativa e devolve quantas ingestões o usuário já tem na hora e no
- * dia, **incluindo o registro corrente**.
+ * Registra a tentativa e devolve o `id` da linha criada.
  *
- * Inserir antes de contar é o que fecha a corrida: duas requisições simultâneas
- * do mesmo usuário não passam ambas pelo SELECT (design D2).
+ * O `id` volta porque é o único jeito de fechar **esta** tentativa: a API de
+ * escrita ignora ordenação e limite, então "a pendente mais recente" atualiza
+ * todas as pendentes do usuário — e com duas chamadas em voo, uma fecha a
+ * tentativa da outra.
+ *
+ * Falhar aqui significa que nenhuma linha existe: o pipeline trata como falha
+ * anterior ao registro e não tenta fechar nada.
  */
 export async function registrarTentativa(
   cliente: SupabaseClient,
   host: string,
-): Promise<{ hora: number; dia: number }> {
+): Promise<{ id: string }> {
   const { data: registro, error } = await cliente
     .from('ingest_log')
     .insert({ host, resultado: 'pendente' })
@@ -80,19 +93,40 @@ export async function registrarTentativa(
     throw new Error('auditoria-indisponivel');
   }
 
+  return { id: registro.id };
+}
+
+/**
+ * Conta as ingestões do usuário na hora e no dia, **incluindo o registro
+ * corrente** — é o que fecha a corrida do design D2.
+ *
+ * A janela é calculada aqui e enviada como valor ISO 8601 porque o filtro do
+ * PostgREST é um literal, não SQL: `now() - interval '1 hour'` é recusado pelo
+ * banco como formato inválido de `timestamptz` (`22007`) e a contagem falha.
+ * Como o filtro usa `head: true`, a resposta é um `HEAD` sem corpo — o erro
+ * chega ao `supabase-js` sem mensagem nenhuma, o que tornava o defeito invisível
+ * no log.
+ *
+ * As duas janelas saem do mesmo `agora`: dois `Date.now()` sucessivos fariam a
+ * contagem horária e a diária discordarem entre si.
+ */
+export async function contarJanelas(
+  cliente: SupabaseClient,
+  agora: number = Date.now(),
+): Promise<Janelas> {
   const [hora, dia] = await Promise.all([
-    contarDesde(cliente, "now() - interval '1 hour'"),
-    contarDesde(cliente, "now() - interval '1 day'"),
+    contarDesde(cliente, new Date(agora - JANELA_HORA_MS)),
+    contarDesde(cliente, new Date(agora - JANELA_DIA_MS)),
   ]);
 
   return { hora, dia };
 }
 
-async function contarDesde(cliente: SupabaseClient, desde: string): Promise<number> {
+async function contarDesde(cliente: SupabaseClient, desde: Date): Promise<number> {
   const { count, error } = await cliente
     .from('ingest_log')
     .select('id', { count: 'exact', head: true })
-    .gte('criado_em', desde);
+    .gte('criado_em', desde.toISOString());
 
   if (error) {
     throw new Error('auditoria-indisponivel');
@@ -101,17 +135,35 @@ async function contarDesde(cliente: SupabaseClient, desde: string): Promise<numb
   return count ?? 0;
 }
 
-/** Atualiza o desfecho da última tentativa do usuário. */
+/**
+ * Grava o desfecho **da linha que esta tentativa criou** e diz se gravou.
+ *
+ * O filtro é por `id`, nunca por `resultado = 'pendente'` + ordenação: a API de
+ * escrita aceita `order` e `limit` e **os ignora**, então o filtro anterior
+ * atualizava todas as pendências do usuário.
+ *
+ * O `.select('id')` existe para o pipeline distinguir "não havia linha para
+ * fechar" de "a gravação foi recusada" — sem ele, os dois casos são o mesmo
+ * sucesso mudo.
+ */
 export async function marcarDesfecho(
   cliente: SupabaseClient,
+  id: string,
   resultado: 'sucesso' | 'duplicada' | 'erro',
-): Promise<void> {
-  await cliente
+): Promise<{ gravado: boolean }> {
+  const { data, error } = await cliente
     .from('ingest_log')
     .update({ resultado })
-    .eq('resultado', 'pendente')
-    .order('criado_em', { ascending: false })
-    .limit(1);
+    .eq('id', id)
+    .select('id');
+
+  if (error) {
+    // Relançado cru, como em `inserirVaga`: o pipeline lê `.code` para o log, e
+    // embrulhar aqui esconderia o SQLSTATE — que é público e é o que diagnostica.
+    throw error;
+  }
+
+  return { gravado: (data?.length ?? 0) > 0 };
 }
 
 /**

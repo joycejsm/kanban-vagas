@@ -71,13 +71,17 @@ interface Rastros {
   inserir: number;
   registrar: number;
   marcar: string[];
+  marcarIds: string[];
 }
+
+/** `id` que o registro de auditoria devolve; o desfecho tem de voltar nele. */
+const REGISTRO_ID = '9fcd1ce7-a5bb-4878-9479-14574acfa203';
 
 function depsBase(
   sobrescritas: Partial<Dependencias> = {},
   negadas: string[] = [],
 ): { deps: Dependencias; rastros: Rastros } {
-  const rastros: Rastros = { buscar: 0, extrair: 0, inserir: 0, registrar: 0, marcar: [] };
+  const rastros: Rastros = { buscar: 0, extrair: 0, inserir: 0, registrar: 0, marcar: [], marcarIds: [] };
 
   const deps: Dependencias = {
     config: CONFIG,
@@ -85,8 +89,9 @@ function depsBase(
     autenticar: () => Promise.resolve(USUARIO),
     registrarTentativa: () => {
       rastros.registrar++;
-      return Promise.resolve({ hora: 1, dia: 1 });
+      return Promise.resolve({ id: REGISTRO_ID });
     },
+    contarJanelas: () => Promise.resolve({ hora: 1, dia: 1 }),
     buscar: () => {
       rastros.buscar++;
       return Promise.resolve('<html><body>Vaga</body></html>');
@@ -99,9 +104,10 @@ function depsBase(
       rastros.inserir++;
       return Promise.resolve(VAGA);
     },
-    marcarDesfecho: (resultado) => {
+    marcarDesfecho: (id, resultado) => {
       rastros.marcar.push(resultado);
-      return Promise.resolve();
+      rastros.marcarIds.push(id);
+      return Promise.resolve({ gravado: true });
     },
     ...sobrescritas,
   };
@@ -242,28 +248,16 @@ describe('etapaAllowlist', () => {
 });
 
 describe('etapaRateLimit', () => {
-  it('aceita dentro do limite', async () => {
-    const { deps } = depsBase();
-
-    assertEquals(await etapaRateLimit(deps, 'empresa.com'), null);
+  it('aceita dentro do limite', () => {
+    assertEquals(etapaRateLimit({ hora: 1, dia: 1 }), null);
   });
 
-  it('recusa no 21º da hora', async () => {
-    const { deps } = depsBase({
-      registrarTentativa: () => Promise.resolve({ hora: LIMITE_POR_HORA + 1, dia: 5 }),
-    });
-
-    const falha = await etapaRateLimit(deps, 'empresa.com');
-
-    assertEquals(falha?.status, 429);
+  it('recusa no 21º da hora', () => {
+    assertEquals(etapaRateLimit({ hora: LIMITE_POR_HORA + 1, dia: 5 })?.status, 429);
   });
 
-  it('recusa no 101º do dia, mesmo com menos de 20 na hora', async () => {
-    const { deps } = depsBase({
-      registrarTentativa: () => Promise.resolve({ hora: 3, dia: LIMITE_POR_DIA + 1 }),
-    });
-
-    assertEquals((await etapaRateLimit(deps, 'empresa.com'))?.status, 429);
+  it('recusa no 101º do dia, mesmo com menos de 20 na hora', () => {
+    assertEquals(etapaRateLimit({ hora: 3, dia: LIMITE_POR_DIA + 1 })?.status, 429);
   });
 
   it('os limites são 20/hora e 100/dia', () => {
@@ -424,7 +418,7 @@ describe('executarPipeline — falhas encadeiam na ordem', () => {
   it('limite excedido interrompe antes de qualquer fetch', async () => {
     const restaurar = silenciarLogs();
     const { deps, rastros } = depsBase({
-      registrarTentativa: () => Promise.resolve({ hora: 99, dia: 99 }),
+      contarJanelas: () => Promise.resolve({ hora: 99, dia: 99 }),
     });
 
     const resposta = await executarPipeline(requisicao({ token: 'ok' }), deps);
@@ -433,6 +427,7 @@ describe('executarPipeline — falhas encadeiam na ordem', () => {
     assertEquals(resposta.status, 429);
     assertEquals(rastros.buscar, 0);
     assertEquals(rastros.extrair, 0);
+    assertEquals(rastros.marcar, ['erro'], 'a tentativa que bateu no limite também fecha');
   });
 
   it('URL bloqueada interrompe antes do fetch', async () => {
@@ -531,6 +526,109 @@ describe('executarPipeline — persistência', () => {
     assertEquals(resposta.status, 422);
     assertEquals(rastros.inserir, 0);
     assertEquals(texto.includes('x'.repeat(50)), false, 'não vaza a saída do modelo');
+  });
+});
+
+describe('executarPipeline — auditoria', () => {
+  it('o desfecho vai para a linha que a tentativa criou', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase();
+
+    await executarPipeline(requisicao({ token: 'ok' }), deps);
+    restaurar();
+
+    // O `id` vem do INSERT e é o único filtro possível: a API de escrita ignora
+    // `order` e `limit`, então "a pendente mais recente" fecharia todas.
+    assertEquals(rastros.marcarIds, [REGISTRO_ID]);
+    assertEquals(rastros.marcar, ['sucesso']);
+  });
+
+  it('contagem que falha fecha a linha que já existe, em vez de deixá-la pendente', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase({
+      contarJanelas: () => Promise.reject(new Error('auditoria-indisponivel')),
+    });
+
+    const resposta = await executarPipeline(requisicao({ token: 'ok' }), deps);
+    const texto = await resposta.text();
+    const logs = restaurar();
+
+    // Este é o defeito que a auditoria de 01/10 provou: o registro era inserido, a
+    // contagem falhava, e o `catch` do pipeline tratava como se nada tivesse sido
+    // registrado — a linha ficava `pendente` e a cota era consumida sem retorno.
+    assertEquals(resposta.status, 500);
+    assertEquals(rastros.marcar, ['erro'], 'a tentativa tem de fechar, mesmo falhando na auditoria');
+    assertEquals(rastros.marcarIds, [REGISTRO_ID]);
+    assertEquals(rastros.buscar, 0, 'nem chegou a buscar a página');
+    assertEquals(texto.includes('auditoria-indisponivel'), false, 'não vaza detalhe do banco');
+    // `console.error` no Deno não interpola `%s`: o valor da etapa vem solto, depois
+    // do formato. É o que o teste de origem existente já documenta.
+    assertMatch(logs.join('\n'), /\bauditoria\b/, 'o log precisa dizer onde parou');
+  });
+
+  it('registro que falha não tenta fechar linha que não existe', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase({
+      registrarTentativa: () => Promise.reject(new Error('auditoria-indisponivel')),
+    });
+
+    const resposta = await executarPipeline(requisicao({ token: 'ok' }), deps);
+    const texto = await resposta.text();
+    const logs = restaurar();
+
+    assertEquals(resposta.status, 500);
+    assertEquals(rastros.marcar, [], 'não há linha para fechar');
+    assertEquals(texto.includes('auditoria-indisponivel'), false);
+    assertMatch(logs.join('\n'), /\bauditoria\b/);
+  });
+
+  it('duas requisições simultâneas não fecham a linha uma da outra', async () => {
+    const restaurar = silenciarLogs();
+    let proximo = 0;
+    const { deps, rastros } = depsBase({
+      registrarTentativa: () => Promise.resolve({ id: `linha-${proximo++}` }),
+    });
+
+    await Promise.all([
+      executarPipeline(requisicao({ token: 'ok' }), deps),
+      executarPipeline(requisicao({ token: 'ok' }), deps),
+    ]);
+    restaurar();
+
+    // Cada requisição fecha o registro que ela criou. Com o filtro antigo
+    // ("pendente mais recente do usuário"), uma fecharia a linha da outra.
+    assertEquals(rastros.marcar, ['sucesso', 'sucesso']);
+    assertEquals(new Set(rastros.marcarIds).size, 2, 'os ids fechados precisam ser distintos');
+  });
+
+  it('falha ao fechar a tentativa aparece no log e não altera a resposta', async () => {
+    const restaurar = silenciarLogs();
+    const { deps } = depsBase({
+      marcarDesfecho: () => Promise.reject({ code: '42501' }),
+    });
+
+    const resposta = await executarPipeline(requisicao({ token: 'ok' }), deps);
+    const corpo = await resposta.json();
+    const logs = restaurar();
+
+    // Silencioso no efeito, nunca no registro: a linha pode ficar `pendente`, e era
+    // justamente aí que não havia pista nenhuma.
+    assertEquals(resposta.status, 201, 'a vaga entra mesmo com a auditoria indisponível');
+    assertEquals((corpo as { vaga: typeof VAGA }).vaga.id, 'vaga-1');
+    assertMatch(logs.join('\n'), /etapa=auditoria/);
+    assertMatch(logs.join('\n'), /42501/);
+  });
+
+  it('fechamento que não encontrou a linha é distinguível do que gravou', async () => {
+    const restaurar = silenciarLogs();
+    const { deps } = depsBase({
+      marcarDesfecho: () => Promise.resolve({ gravado: false }),
+    });
+
+    await executarPipeline(requisicao({ token: 'ok' }), deps);
+    const logs = restaurar();
+
+    assertMatch(logs.join('\n'), /codigo=desfecho-nao-encontrado/);
   });
 });
 

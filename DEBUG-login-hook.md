@@ -168,3 +168,47 @@ supabase functions deploy ingest-vaga
 
 `APP_ORIGIN` precisa ser a porta em que o app roda (3002), porque `origemPermitida` é
 igualdade estrita de esquema, host e porta.
+## O que nenhuma suíte pegou: duas camadas verdes sobre uma integração morta
+
+A ingestão por URL ficou dias com **todas** as suítes verdes e a funcionalidade sem funcionar —
+nenhuma requisição passava do limite de uso. Duas lições distintas, ambas sobre **contratos que
+só existem entre as camadas**:
+
+### 1. Server Action ↔ Edge Function não era coberto por teste de integração
+
+A suíte da função e a do Next verificavam as duas pontas com dublês. A costura real — a Server
+Action chamando a função pelo URL implantado, com o token e sem `Origin` — não tinha teste
+nenhum. Um contrato errado ali passa porque os dois lados estão testados contra o que cada um
+*acredita* que o outro faz. É a mesma classe de bug do login, e a mesma lição: **defeito de
+integração não aparece em suíte de unidade**, e a task 3.3 da change
+`fix-ingest-origin-and-error-codes` (colar a URL no navegador) é a única prova real.
+
+### 2. `supabase-js` ↔ PostgREST: o filtro é um valor, e `head: true` esconde o erro
+
+`contarDesde` mandava `now() - interval '1 hour'` como **valor** de filtro
+(`criado_em=gte.now() - interval '1 hour'`). O PostgREST não avalia SQL em filtro: ele converte o
+texto para `timestamptz` e devolve
+
+```
+400 {"code":"22007","message":"invalid input syntax for type timestamp with time zone:
+     \"now() - interval '1 hour'\""}
+```
+
+A soma que tornou isso invisível: a contagem usava `head: true`, o que faz a requisição ser um
+`HEAD` **sem corpo**. O `supabase-js` devolvia um erro com **mensagem vazia** → `auditoria-indisponivel`
+→ `etapaRateLimit` lançava → o `catch` do pipeline respondia `500` com `codigo=erro_interno`, sem
+nomear a etapa, e a linha ficava `pendente`.
+
+Duas regras que decorrem disso, para não repetir:
+
+- **Filtro do PostgREST é literal, não expressão.** Janela, data e `now()` se calculam no isolate
+  e viajam em ISO 8601. Para lógica que realmente precise de SQL, o caminho é RPC no Postgres.
+- **`head: true` é armadilha de diagnóstico.** `select(..., { count: 'exact', head: true })` troca
+  corpo por status: qualquer erro de conteúdo chega ao chamador sem mensagem. Quando um erro
+  "não diz nada", suspeite do `head` antes de suspectar do log.
+
+O conserto (change `fix-ingest-audit-window-and-outcome`) isolou as duas metades — registro e
+contagem viraram etapas separadas, e a linha é fechada pelo `id` que a tentativa criou. O `id`
+importa porque a API de escrita **ignora `order` e `limit` em `PATCH`**: o filtro anterior
+(`resultado = 'pendente'` + `order` + `limit`) atualizava todas as pendências do usuário, e com
+duas requisições em voo uma fechava a tentativa da outra.

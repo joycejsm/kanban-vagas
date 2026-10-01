@@ -1,7 +1,10 @@
 # Handoff — sessão encerrada em 2026-10-01
 
-Estado no fim da sessão. Duas coisas abertas: a change `fix-ingest-origin-and-error-codes` (9 de 13
-tasks) e um erro no teste manual que **não** foi diagnosticado. Comece por aqui.
+Estado no fim da sessão. O erro do teste manual foi **diagnosticado e consertado** — mas o conserto
+ainda **não está commitado nem implantado**. Duas coisas em aberto, nesta ordem:
+
+1. a change `fix-ingest-audit-window-and-outcome` (código pronto e verificado, **falta o deploy**);
+2. a extração da Gupy, que é a **próxima change** e só fica demonstrável depois do deploy.
 
 ## 1. O login por Google está resolvido
 
@@ -14,7 +17,7 @@ O app abre no quadro normalmente, inclusive depois de derrubar e subir o servido
 
 ## 2. Change aberta: `fix-ingest-origin-and-error-codes`
 
-`openspec/changes/fix-ingest-origin-and-error-codes/` — **9/13 tasks**. Commits `d5245fb`, `0e8bab0`,
+`openspec/changes/fix-ingest-origin-and-error-codes/` — **11/13 tasks**. Commits `d5245fb`, `0e8bab0`,
 `22a451f`.
 
 O que ela conserta: o cadastro por URL **nunca funcionou**. A Server Action chama a Edge Function por
@@ -38,68 +41,76 @@ primeira etapa do pipeline. Toda requisição real morria em `403` antes de extr
 
 Verificação no fim: typecheck limpo, **292** vitest, pgTAP PASS, **153** passos da função.
 
-### Falta (4 tasks)
+### Falta (2 tasks, ambas do navegador da usuária)
 
 - **3.3** — abrir `http://localhost:3002`, colar uma URL de vaga, confirmar que entra no quadro.
 - **3.4** — com e-mail fora da allowlist, conferir que a tela mostra a de falta de permissão e **não**
-  "sua sessão expirada".
-- **4.1 e 4.2** — registrar em `DEBUG-login-hook.md` e no README que a chamada é servidor-para-servidor
-  e não carrega `Origin`, para a conferência não ser "corrigida" de volta.
+  "sua sessão expirou".
 
-3.3 e 3.4 são do navegador da usuária e **não dá para automatizar**: o projeto só tem login Google e o
-login por senha está desabilitado (`email logins are disabled`), então não há como obter token para
-chamar a função por script. As 4.1 e 4.2 são de documentação e podem ser feitas a qualquer momento.
+As tasks **4.1 e 4.2 estão feitas**: `DEBUG-login-hook.md` ganhou a seção "O que nenhuma suíte pegou"
+e o README ganhou "A chamada é servidor-para-servidor, e por isso não leva `Origin`".
 
-## 3. O erro do teste manual — em aberto
+3.3 e 3.4 **não dá para automatizar**: o projeto só tem login Google e o login por senha está
+desabilitado (`email logins are disabled`), então não há como obter token para chamar a função por
+script.
 
-A usuária colou uma URL da Gupy (`carreirasomie.gupy.io`) e deu erro. O que se sabe:
+⚠️ **3.3 muda de resultado esperado.** Com URL da Gupy a resposta passa a ser `422` pedindo o texto
+colado, não `201` — ver a seção 3. Um `422` ali é o primeiro sinal de que o pipeline inteiro rodou.
 
-- A auditoria registrou **uma** tentativa, em 01/10 **01:50:47**, com `resultado = 'pendente'`.
-- `resultado` tem default `'pendente'`, então isso quer dizer: **o desfecho nunca foi gravado**.
-- A linha só é inserida por `etapaRateLimit`, e ela vem **depois** de origem, token, allowlist e
-  validação de corpo. Ou seja: a correção da origem funcionou, e a requisição avançou bastante.
-- Não é o deploy que matou a requisição: o deploy foi 01:48:22, a tentativa 01:50:47, 2,5 min depois.
-- Não é a Gupy bloqueando: ela responde `200` com 140 KB de conteúdo real, sem challenge de bot, num
-  `curl` daqui com User-Agent de navegador.
-- RLS de `ingest_log` está correto: `UPDATE ... using (auth.uid() = user_id)`, com `with check` igual.
+## 3. O erro do teste manual — RESOLVIDO, e o conserto ainda não foi implantado
 
-### As duas hipóteses que sobraram
+O `resultado = 'pendente'` **não** era morte por tempo nem `marcarDesfecho` falhando — as duas
+hipóteses do handoff anterior. Era uma terceira.
 
-1. **A requisição morreu por tempo.** Passou da auditoria, foi buscar a página e chamar o Gemini, e o
-   limite de wall-clock da função cortou no meio. Nesse caso o `catch` do `executarPipeline` também não
-   chegou a rodar, e nada foi marcado.
-2. **`marcarDesfecho` falhou em silêncio.** `marcarDesfechoSilencioso` engole a exceção de propósito, então
-   uma falha ali deixa a linha em `pendente` para sempre sem deixar rastro.
+**Causa raiz:** `contarDesde` mandava `now() - interval '1 hour'` como **valor** de filtro
+(`criado_em=gte.now() - interval '1 hour'`). O PostgREST não avalia SQL em filtro, e devolve
+`400 / 22007 invalid input syntax for type timestamp with time zone`. Como a contagem usava
+`head: true` (requisição HEAD, sem corpo), o `supabase-js` devolvia um erro de **mensagem vazia** →
+`auditoria-indisponivel` → `etapaRateLimit` lançava → o `catch` do pipeline rodava com
+`auditoriaAberta = false` e deixava a linha aberta.
 
-A segunda é a mais séria, e vale checar mesmo se for a primeira: **`resultado = 'pendente'` significa que
-a tentativa não fecha, e o rate limit conta `hora`/`dia` na hora do insert.** Se as tentativas não
-fecham, o limite de 20/hora e 100/dia é consumido sem nunca ser liberado — e volta a bloquear a conta
-depois de um punhado de usos, com um `429` que ninguém sabe explicar.
+Isso era pior do que o 500: **a ingestão por URL nunca passou do limite de uso** — nem fetch, nem
+Gemini, nem insert. E cada tentativa consumia cota sem nunca fechar, o que tornava o `429` de 20/hora
+uma hipótese sem explicação.
+
+As duas hipóteses do handoff anterior foram descartadas na prática: a query reproduzida no PostgREST
+real dá o `22007`; o `PATCH` com `order` + `limit` tem os dois **ignorados** (o código antigo
+fechava todas as pendências do usuário, não uma); e o grant de `update` só na coluna funciona. A
+camada de dados está saudável.
+
+### O que o conserto faz
+
+`openspec/changes/fix-ingest-audit-window-and-outcome/` — **12/13 tasks**, a 4.2 (deploy) é a que
+falta. Janela em ISO 8601 calculada no isolate (as duas do mesmo instante); registro e contagem
+viraram etapas separadas; desfecho gravado pelo `id` criado, não por "a pendente mais recente";
+etapa `auditoria` nomeada no log; falha ao fechar a linha aparece no log em vez de sumir.
 
 ### O primeiro passo da próxima sessão
 
-Ler o log da função, que é o que decide entre as duas hipóteses. O CLI desta máquina (2.118.0) **não**
-tem `supabase functions logs` — só o dashboard:
+**Implantar.** Nada disso está em produção ainda — a versão implantada continua com o defeito:
 
-```
-https://supabase.com/dashboard/project/lpibbdvxpsqqujmnqydk/functions/ingest-vaga
-```
-
-Procurar a linha `[ingest-vaga]` da tentativa. Ela agora inclui `origem=` (foi o que a task 1.4
-acrescentou justamente para isso) e mostra se o erro foi em `fetch`, em `extracao` ou em `persistencia`.
-
-Complemento no terminal do `next dev`, onde a action também loga:
-
-```
-[acoes/erros] status=NNN code=... code_funcao=...
+```bash
+supabase functions deploy ingest-vaga
 ```
 
-Os dois juntos dizem a história inteira: o `code_funcao` diz a categoria, e o log da função diz o
-detalhe da etapa.
+Depois, `curl` autenticado sem `Origin` para confirmar que deixou de ser `500` na auditoria. O CLI
+desta máquina (2.118.0) **não** tem `supabase functions logs`; para o log da função, o dashboard:
+`https://supabase.com/dashboard/project/lpibbdvxpsqqujmnqydk/functions/ingest-vaga`.
 
-Depois: decidir se é preciso corrigir o fechamento da auditoria. Se for a hipótese 2, o conserto é
-tornar o `marcarDesfecho` observável — hoje ele falha em silêncio justamente no ponto em que a
-informação seria mais valiosa.
+## 3-bis. Próxima change: a Gupy devolve casca de React, não a vaga
+
+Medido enquanto se reproduzia o defeito da auditoria: a página da Gupy
+(`carreirasomie.gupy.io/job/...`) responde `200` com **3.905 bytes** de casca de React
+(`<div id="candidates-root">`, `<noscript>You need to enable JavaScript to run this app.</noscript>`).
+Não há `JobPosting` em JSON-LD nem texto visível — o anúncio é montado no cliente. A extração
+devolve campos vazios e a resposta vira `422` pedindo o texto colado.
+
+**É outra change**, e ela só fica demonstrável depois do deploy acima: este conserto faz a requisição
+*chegar* à extração, não faz a extração funcionar na Gupy. Colar a URL da Gupy deve dar `422` — se
+voltar a dar `500`, o conserto da auditoria não chegou.
+
+Nota de um teste local: a extração falhou uma vez com `503 high demand` do Gemini. Transitório —
+`gemini-3.5-flash` responde `200`.
 
 ## 4. Estado do ambiente
 
@@ -131,8 +142,28 @@ listas que quebrou o login nesta semana.
 
 ## 6. Não commitado
 
+Nada foi commitado nesta sessão. Este é o estado exato da árvore:
+
 ```
- M next-env.d.ts                                  (gerado pelo next dev; descartar)
+ M supabase/functions/ingest-vaga/_shared/pipeline.ts        conserto da contagem e do desfecho
+ M supabase/functions/ingest-vaga/_shared/supabase.ts         janela em ISO 8601, desfecho por id
+ M supabase/functions/ingest-vaga/_shared/pipeline.test.ts
+ M supabase/functions/ingest-vaga/_shared/supabase.test.ts
+ M supabase/functions/ingest-vaga/index.ts                    composição das dependências
+?? openspec/changes/fix-ingest-audit-window-and-outcome/     change nova, completa
+ M DEBUG-login-hook.md / README.md / HANDOFF-ingest.md        docs das tasks 4.1-4.4
+ M openspec/changes/fix-ingest-audit-window-and-outcome/…    tasks 1.1-3.5, 4.1, 4.3, 4.4 marcadas
+ M openspec/changes/fix-ingest-origin-and-error-codes/tasks.md  tasks 4.1 e 4.2 marcadas
 ```
 
-O `tasks.md` da change vai junto no próximo commit junto com 4.1 e 4.2.
+Verificação no fim desta sessão: typecheck limpo, **292** vitest, pgTAP **PASS**, **168** passos da
+função (39 testes; eram 153 passos / 35 testes).
+
+### Sujeira deixada no ambiente local
+
+Nada disso é produção, mas convém saber que existe:
+
+- `supabase functions serve` continua rodando em background (PID 1112171), com o env-file
+  `/tmp/env-funcao-1112126.env` — **modo 600, contém `GEMINI_API_KEY` real**.
+- `/tmp/token-local` existe e está em **modo 664** (o env-file está 600; o token não).
+- Um usuário de teste e duas linhas de auditoria na **stack local**, não na remota.
