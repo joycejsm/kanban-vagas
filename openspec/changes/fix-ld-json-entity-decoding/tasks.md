@@ -30,8 +30,11 @@
 
 ## 4. Registro
 
-- [ ] 4.1 Corrigir no `HANDOFF-ingest.md` a afirmação de que a Gupy devolve 3.905 bytes de casca de
-  React sem `JobPosting`, que é falsa e foi a premissa da change anterior
+- [ ] 4.1 Corrigir a afirmação de que a Gupy devolve 3.905 bytes de casca de React sem `JobPosting`, que é
+  falsa e foi a premissa da change anterior. Ela já foi corrigida no
+  `openspec/changes/fix-ingest-audit-window-and-outcome/proposal.md` e na task 4.4 do mesmo arquivo, com a
+  nota de correção datada; confirmar que **nenhum** documento mantém a versão antiga. O `HANDOFF-ingest.md`
+  foi reescrito e já não afirma isso — não é nele que a premissa sobreviveu.
 - [ ] 4.2 Registrar em `DEBUG-login-hook.md` a lição da medição: testar a URL que o sistema processa, e
   tratar duas medições que se contradizem como sinal para resolver antes de escrever a change
 - [ ] 4.3 Anotar a limpeza de `extrairListaDaDescricao` — que separa mal o cabeçalho `<h2>` do texto

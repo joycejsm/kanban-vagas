@@ -74,9 +74,11 @@ de "a gravação foi recusada", que antes eram o mesmo silêncio.
 
 ## Fora de escopo
 
-- **A página da Gupy é renderizada no cliente.** Medido: `carreirasomie.gupy.io/job/...` devolve 3.905 bytes
-  de casca de React, sem `JobPosting` e sem texto visível. Enquanto isso não for resolvido (JSON da Gupy,
-  renderização, ou o caminho de texto colado), a ingestão da Gupy vai responder `422` pedindo o texto. É outra
-  change; aqui só fica o registro de que o limite de uso não era a causa do erro que a usuária viu.
+- **A extração estruturada da Gupy falha** e joga a vaga no LLM. Medido em 2026-10-01: a página de vaga
+  responde `200` com ~117 KB e traz `JobPosting` completo, mas com o `ld+json` escapado como HTML. A ingestão
+  da Gupy **não** responde `422` pedindo o texto colado. É a change `fix-ld-json-entity-decoding`. Aqui só
+  fica o registro de que o limite de uso não era a causa do erro que a usuária viu.
+  - *Correção (2026-10-01):* este item afirmava antes que a página devolvia 3.905 bytes de casca de React,
+    sem `JobPosting`. **Falso** — os 3.905 bytes são `/candidates/auth`, a página de autenticação.
 - **A linha `pendente` de 01/10.** Ela conta na janela e expira sozinha em 1 hora/1 dia. Não há migração de
   limpeza: uma tentativa que ficou aberta por um defeito é informação, não lixo.

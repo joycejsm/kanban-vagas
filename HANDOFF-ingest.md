@@ -76,8 +76,8 @@ e o README ganhou "A chamada é servidor-para-servidor, e por isso não leva `Or
 desabilitado (`email logins are disabled`), então não há como obter token para chamar a função por
 script.
 
-⚠️ **3.3 muda de resultado esperado.** Com URL da Gupy a resposta passa a ser `422` pedindo o texto
-colado, não `201` — ver a seção 3. Um `422` ali é o primeiro sinal de que o pipeline inteiro rodou.
+⚠️ **3.3 muda de resultado esperado.** A vaga tem que entrar no quadro. **Não** se espera `422` pedindo
+o texto colado com URL da Gupy — essa expectativa veio da medição falsa corrigida na seção 6.
 
 ## 3. O erro do teste manual — RESOLVIDO, consertado e implantado (v4)
 

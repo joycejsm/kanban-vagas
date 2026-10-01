@@ -64,11 +64,17 @@ uma hora.
 
 ### Defeito vizinho, fora deste escopo
 
-Medido enquanto se reproduzia: a página de vaga da Gupy (`carreirasomie.gupy.io/job/...`) responde `200` com
-**3.905 bytes** de casca de React (`<div id="candidates-root">`, `<noscript>You need to enable JavaScript to
-run this app.</noscript>`) — o anúncio é montado no cliente. Não há `JobPosting` em JSON-LD nem texto visível,
-então a extração devolve campos vazios e a resposta será `422` pedindo o texto colado. **Isto é outra change**:
-este conserto faz a requisição *chegar* à extração, não faz a extração funcionar na Gupy.
+Medido enquanto se reproduzia: a página de vaga da Gupy responde `200` com ~**117 KB** e traz `JobPosting`
+completo em `ld+json` — o bloco, porém, vem com o JSON escapado como HTML, e a extração engolindo isso devolve
+campos vazios e joga a vaga no LLM. **Isto é outra change**, a `fix-ld-json-entity-decoding`.
+
+> **Correção (2026-10-01).** Este texto originalmente afirmava que a Gupy respondia `200` com **3.905 bytes** de
+> casca de React (`<div id="candidates-root">`, `<noscript>You need to enable JavaScript to run this
+> app.</noscript>`) e que não havia `JobPosting` algum. **A premissa estava errada.** Os 3.905 bytes são a
+> página de autenticação — mesma origem, página diferente — e a página de vaga real responde com 117 KB e o
+> `JobPosting` inteiro. O documento já registrava "140 KB de conteúdo real" e "3.905 bytes" lado a lado, e
+> ninguém resolveu a contradição antes de escrever a change. Consequência: a expectativa de `422` com URL da
+> Gupy, que constava deste proposal e da task 4.4, está errada — a Gupy **não** deve pedir texto colado.
 
 ## Capabilities
 
@@ -102,4 +108,5 @@ Nenhuma.
   do banco.
 - **Verificação de ponta a ponta**: a task 3.3 da change `fix-ingest-origin-and-error-codes` (colar uma URL
   no navegador) só passa a ser possível depois desta. Ela continua sendo da usuária, e o resultado esperado
-  muda: com URL da Gupy, `422` pedindo o texto colado — que é o primeiro sinal de que o pipeline inteiro rodou.
+  muda: a vaga precisa **entrar no quadro**. Não é `422` pedindo o texto colado — essa expectativa veio da
+  medição falsa da Gupy corrigida acima.

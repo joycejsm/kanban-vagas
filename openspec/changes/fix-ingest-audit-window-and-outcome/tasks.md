@@ -41,9 +41,13 @@
     da função rodar. Sem token de produção — que só se obtém por login Google no navegador — nenhum
     `curl` alcança a contagem. O que o `curl` sem token confirma, e foi confirmado: função no ar e
     `verify_jwt` ligado.
-  - **A prova de que a auditoria parou de dar `500` é a task 3.3**, no navegador: com URL da Gupy o
-    resultado esperado é `422` pedindo o texto colado.
+  - **A prova de que a auditoria parou de dar `500` é a task 3.3**, no navegador: a vaga tem que entrar
+    no quadro. Não se espera `422` com URL da Gupy — essa expectativa veio de uma medição falsa, corrigida
+    em 2026-10-01 e registrada no proposal desta change.
 - [x] 4.3 Registrar em `DEBUG-login-hook.md` (ou no arquivo de handoff vigente) que o filtro do PostgREST é um
   valor e que `head: true` esconde o corpo do erro — a soma dos dois é o que tornou este defeito invisível
-- [x] 4.4 Anotar no handoff a medição da Gupy (3.905 bytes de casca de React) como a **próxima** change, para
-  que a `422` esperada depois deste conserto não seja lida como regressão
+- [x] 4.4 Anotar no handoff a medição da Gupy como a **próxima** change, para que a falha de extração
+    depois deste conserto não seja lida como regressão
+  - **Corrigido em 2026-10-01**: a nota falava em "3.905 bytes de casca de React", que era a página de
+    autenticação. A página de vaga responde `200` com ~117 KB e traz `JobPosting` — o defeito é o `ld+json`
+    escapado, e a change que o conserta é a `fix-ld-json-entity-decoding`.
