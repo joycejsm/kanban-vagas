@@ -33,8 +33,12 @@
 - [x] 3.2 Implantar **a função primeiro** (`scripts/configurar-edge-function.sh`) e só depois subir o app, para
   que nenhuma janela tenha app novo contra função antiga; conferir com `curl` na rota da função que uma
   requisição sem `Origin` e sem token responde `401` e não `403`
-- [ ] 3.3 Abrir `http://localhost:3002`, colar uma URL de vaga real e confirmar que a vaga entra no quadro — a
+- [x] 3.3 Abrir `http://localhost:3002`, colar uma URL de vaga real e confirmar que a vaga entra no quadro — a
   única prova de que a integração inteira funciona, já que nenhuma suíte isolada cobre esta costura
+  - **Feita em 2026-10-01, depois do deploy da v4.** A vaga entrou na primeira coluna; mover entre
+    colunas e remover funcionaram. Confirmado fora da tela também: `ingest_log` tem
+    `resultado = 'sucesso'` às 05:10:57, depois do deploy das 05:03:35, e **nenhum `pendente` novo** —
+    a linha órfã das 01:50:47 é da versão quebrada.
 - [ ] 3.4 Com um e-mail fora da allowlist, confirmar que a tela mostra a mensagem de falta de permissão e **não**
   "sua sessão expirou", e que nenhuma mensagem nova revela se o endereço está na lista
 
