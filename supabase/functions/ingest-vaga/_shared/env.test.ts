@@ -64,15 +64,23 @@ describe('lerEnv', () => {
 });
 
 describe('origemPermitida', () => {
-  it('aceita somente a origem exata', () => {
+  it('aceita somente a origem exata quando ela é informada', () => {
     const appOrigin = 'https://app.exemplo.com';
 
     assertEquals(origemPermitida('https://app.exemplo.com', appOrigin), true);
     assertEquals(origemPermitida('https://outro.exemplo.com', appOrigin), false);
     assertEquals(origemPermitida('http://app.exemplo.com', appOrigin), false, 'esquema diferente');
     assertEquals(origemPermitida('https://app.exemplo.com:443', appOrigin), false, 'porta explícita');
-    assertEquals(origemPermitida(null, appOrigin), false);
-    assertEquals(origemPermitida('', appOrigin), false);
+    assertEquals(origemPermitida('', appOrigin), false, 'vazia não é ausência');
+  });
+
+  it('aceita origem ausente, que é o que o chamador servidor-para-servidor produz', () => {
+    const appOrigin = 'https://app.exemplo.com';
+
+    // A chamada real vem de um `fetch` dentro de Server Action, e `fetch` de Node não emite
+    // `Origin`: esse cabeçalho é do user agent. Recusar a ausência matava toda requisição do
+    // aplicativo em 403, na primeira etapa do pipeline.
+    assertEquals(origemPermitida(null, appOrigin), true);
   });
 });
 

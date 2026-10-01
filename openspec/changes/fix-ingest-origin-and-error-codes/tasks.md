@@ -2,16 +2,16 @@
 
 ## 1. Edge Function: origem ausente é cliente não-navegador
 
-- [ ] 1.1 Alterar `origemPermitida` em `supabase/functions/ingest-vaga/_shared/env.ts` para aceitar origem
+- [x] 1.1 Alterar `origemPermitida` em `supabase/functions/ingest-vaga/_shared/env.ts` para aceitar origem
   ausente (`origem === null || origem === appOrigin`), preservando a igualdade estrita quando a origem está
   presente, e verificar com a suíte da função (`npm run test:funcao`) que nada mais quebra
-- [ ] 1.2 Substituir em `pipeline.test.ts` o teste "recusa ausência de Origin" por um que fixa a **aceitação**,
+- [x] 1.2 Substituir em `pipeline.test.ts` o teste "recusa ausência de Origin" por um que fixa a **aceitação**,
   mantendo ao lado o que fixa a recusa por origem presente e diferente de `APP_ORIGIN`, e verificar que os dois
   convivem (`npm run test:funcao`)
-- [ ] 1.3 Acrescentar em `pipeline.test.ts` o caso de requisição sem `Origin` que segue no pipeline até a
+- [x] 1.3 Acrescentar em `pipeline.test.ts` o caso de requisição sem `Origin` que segue no pipeline até a
   extração, e o caso de ausência de `Origin` sem token, que precisa continuar `401`, verificando com
   `npm run test:funcao`
-- [ ] 1.4 Registrar em log a origem recebida e o resultado da conferência no descarte da chamada, sem e-mail,
+- [x] 1.4 Registrar em log a origem recebida e o resultado da conferência no descarte da chamada, sem e-mail,
   token ou conteúdo de página, e verificar que a linha aparece ao exercitar os casos 1.2 e 1.3
 
 ## 2. Next: tradução por `code`, com fallback por status

@@ -78,8 +78,7 @@ Dizer "este e-mail não tem acesso" para quem acabou de tentar entrar confirmari
 sobre a allowlist por quem não tem conta. A tela é vista por alguém autenticado, mas a session pode ser de
 conta compartilhada, e a informação não é necessária para agir: a ação correta é a mesma nos dois casos —
 falar com quem administra a lista. A mensagem fica no mesmo nível de genericidade da de sessão, mudando
-apenas o que a pessoa deve fazer a seguir. Registrado aqui porque é uma restrição que a implementação
-tende a soltar aspas ao escrever a frase.
+apenas o que a pessoa deve fazer a seguir. Registrado aqui porque é uma restrição que a implementação tende a afrouxar ao escrever a frase.
 
 ### D4 — A função registra a origem recebida e o resultado da conferência
 

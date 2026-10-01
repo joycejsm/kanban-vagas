@@ -86,16 +86,38 @@ export function registrarFalha(falha: ErroPipeline, contexto: {
   host: string;
   duracaoMs: number;
   usuario: string | null;
+  origem?: string | null;
+  appOrigin?: string;
 }): void {
   const codigo = detalheSqlstate(falha.detalhe);
   console.error(
-    '[ingest-vaga] etapa=%s codigo=%s host=%s duracao_ms=%d usuario=%s',
+    '[ingest-vaga] etapa=%s codigo=%s origem=%s host=%s duracao_ms=%d usuario=%s',
     falha.etapa,
     codigo ?? falha.code,
+    origemParaLog(contexto.origem ?? null, contexto.appOrigin),
     contexto.host,
     Math.round(contexto.duracaoMs),
     contexto.usuario ?? 'anonimo',
   );
+}
+
+/**
+ * Origem recebida e o veredito da conferência, em uma forma só para o log.
+ *
+ * A linha existe porque um `403` não dizia de onde tinha vindo: quando o cadastro por URL
+ * falhou, o `403` aparecia na tela como "sua sessão expirou" e nada ligava a recusa à origem.
+ * Nombrar a origem recebida e dizer se ela passou é o que torna a próxima falha de CORS
+ * diagnosticável sem abrir o isolate.
+ *
+ * O valor vem do chamador, então é limitado em tamanho: um `Origin` longo num log de
+ * produção é um jeito fácil de enchê-lo. Não é dado de pessoa — é o endereço do aplicativo.
+ */
+function origemParaLog(origem: string | null, appOrigin: string | undefined): string {
+  if (origem === null) {
+    return 'ausente:aceita';
+  }
+
+  return `${origem.slice(0, 120)}:${origem === appOrigin ? 'aceita' : 'recusada'}`;
 }
 
 /** Só o SQLSTATE, que é público — a mensagem do banco não vai para o log. */

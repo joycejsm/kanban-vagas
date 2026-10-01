@@ -67,7 +67,22 @@ export function lerEnvPadrao(): EnvConfig {
   return lerEnv((nome) => Deno.env.get(nome));
 }
 
-/** `Origin` é comparado de forma exata: subdomínio diferente não é a mesma origem. */
+/**
+ * `Origin` é comparado de forma exata: subdomínio diferente não é a mesma origem.
+ *
+ * Origem **ausente** é aceita, e é o caso que o chamador real produz. A requisição chega por
+ * `fetch` dentro de uma Server Action, ou seja, servidor-para-servidor: o cabeçalho `Origin` é
+ * emitido pelo user agent, e um `fetch` de Node não o produz. Antes esta função recusava a
+ * ausência, e o resultado era que **toda** chamada real do aplicativo morria em `403` na
+ * primeira etapa do pipeline, sem chegar a extrair nada.
+ *
+ * Aceitar a ausência não afrouxa a proteção que este requisito existe para dar. Navegador
+ * **sempre** envia `Origin` em requisição cross-origin, então nenhuma página alheia consegue
+ * levar a ausência a sério: o `Origin` que ela produz é conferido aqui como sempre, e é recusado
+ * se for diferente de `APP_ORIGIN`. O que passa a ser aceito é a chamada de quem não é
+ * navegador — o servidor do Next, `curl`, um cliente móvel — e essa já era barrada logo depois,
+ * por token de sessão, allowlist e limite de uso.
+ */
 export function origemPermitida(origem: string | null, appOrigin: string): boolean {
-  return origem !== null && origem === appOrigin;
+  return origem === null || origem === appOrigin;
 }

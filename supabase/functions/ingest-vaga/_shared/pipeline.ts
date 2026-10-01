@@ -208,20 +208,20 @@ export async function executarPipeline(
   try {
     // 1. CORS e método
     const falhaCors = etapaCors(requisicao, deps.config);
-    if (falhaCors) return responderErro(falhaCors, deps, inicio, host, usuario);
+    if (falhaCors) return responderErro(falhaCors, deps, inicio, host, usuario, false, undefined, origem);
 
     // 2. Autenticação
     const auth = await etapaAutenticacao(requisicao, deps);
-    if (!auth.ok) return responderErro(auth.falha, deps, inicio, host, null);
+    if (!auth.ok) return responderErro(auth.falha, deps, inicio, host, null, false, undefined, origem);
     usuario = auth.usuario;
 
     // 3. Allowlist
     const falhaAllowlist = etapaAllowlist(usuario, deps.config);
-    if (falhaAllowlist) return responderErro(falhaAllowlist, deps, inicio, host, usuario);
+    if (falhaAllowlist) return responderErro(falhaAllowlist, deps, inicio, host, usuario, false, undefined, origem);
 
     // 4. Corpo
     const corpo = await lerCorpo(requisicao);
-    if (!corpo.ok) return responderErro(corpo.falha, deps, inicio, host, usuario);
+    if (!corpo.ok) return responderErro(corpo.falha, deps, inicio, host, usuario, false, undefined, origem);
 
     host = hostDaUrl(corpo.dados.url);
 
@@ -229,19 +229,19 @@ export async function executarPipeline(
     const falhaLimite = await etapaRateLimit(deps, host);
     // A tentativa foi registrada, então o desfecho precisa ser gravado.
     auditoriaAberta = true;
-    if (falhaLimite) return responderErro(falhaLimite, deps, inicio, host, usuario, true);
+    if (falhaLimite) return responderErro(falhaLimite, deps, inicio, host, usuario, true, undefined, origem);
 
     // 6. Conteúdo (URL + fetch)
     const conteudo = await etapaConteudo(corpo.dados, deps);
-    if (!conteudo.ok) return responderErro(conteudo.falha, deps, inicio, host, usuario, auditoriaAberta);
+    if (!conteudo.ok) return responderErro(conteudo.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
 
     // 7. Extração + validação
     const extracao = await etapaExtracao(conteudo.conteudo, corpo.dados.url, deps);
-    if (!extracao.ok) return responderErro(extracao.falha, deps, inicio, host, usuario, auditoriaAberta);
+    if (!extracao.ok) return responderErro(extracao.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
 
     // 8. Persistência
     const persistencia = await etapaPersistencia(extracao.dados, usuario, deps);
-    if (!persistencia.ok) return responderErro(persistencia.falha, deps, inicio, host, usuario, auditoriaAberta);
+    if (!persistencia.ok) return responderErro(persistencia.falha, deps, inicio, host, usuario, auditoriaAberta, undefined, origem);
 
     await marcarDesfechoSilencioso(deps, 'sucesso');
     console.info(
@@ -253,7 +253,7 @@ export async function executarPipeline(
 
     return respostaJson({ vaga: persistencia.vaga }, 201, origem);
   } catch (erro) {
-    return responderErro(ERROS.erroGenerico(), deps, inicio, host, usuario, auditoriaAberta, erro);
+    return responderErro(ERROS.erroGenerico(), deps, inicio, host, usuario, auditoriaAberta, erro, origem);
   }
 }
 
@@ -265,11 +265,15 @@ async function responderErro(
   usuario: UsuarioAutenticado | null,
   auditoriaAberta = false,
   causa?: unknown,
+  origem: string | null = null,
 ): Promise<Response> {
-  registrarFalha(
-    causa === undefined ? falha : { ...falha, detalhe: causa },
-    { host, duracaoMs: Date.now() - inicio, usuario: usuario ? usuarioTruncado(usuario.id) : null },
-  );
+  registrarFalha(causa === undefined ? falha : { ...falha, detalhe: causa }, {
+    host,
+    duracaoMs: Date.now() - inicio,
+    usuario: usuario ? usuarioTruncado(usuario.id) : null,
+    origem,
+    appOrigin: deps.config.appOrigin,
+  });
   // Só grava desfecho se houve registro da tentativa; falhas anteriores (CORS,
   // auth, allowlist, corpo) acontecem antes de a auditoria existir.
   if (auditoriaAberta) {

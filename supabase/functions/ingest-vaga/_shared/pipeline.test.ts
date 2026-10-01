@@ -150,8 +150,19 @@ describe('etapaCors', () => {
     assertEquals(falha?.status, 403);
   });
 
-  it('recusa ausência de Origin', () => {
-    assertEquals(etapaCors(requisicao({ origem: null }), CONFIG)?.status, 403);
+  it('recusa navegador de origem errada, que é o que a conferência existe para barrar', () => {
+    // O caso acima, por outro ângulo: origem presente e diferente é sempre recusada. É a
+    // proteção que importa, e ela não muda ao lado da aceitação da ausência.
+    assertEquals(etapaCors(requisicao({ origem: 'https://app.exemplo.com:8443' }), CONFIG)?.status, 403);
+    assertEquals(etapaCors(requisicao({ origem: 'https://localhost:3000' }), CONFIG)?.status, 403, 'esquema diferente');
+    assertEquals(etapaCors(requisicao({ origem: 'http://localhost:3002' }), CONFIG)?.status, 403, 'porta diferente');
+    assertEquals(etapaCors(requisicao({ origem: 'http://localhost:3000/x' }), CONFIG)?.status, 403, 'caminho');
+  });
+
+  it('aceita ausência de Origin, que é o que a chamada servidor-para-servidor produz', () => {
+    // Server Action chama a função por `fetch` de Node, que não emite `Origin`: esse cabeçalho
+    // é do user agent. Recusar a ausência matava toda requisição real do app em 403.
+    assertEquals(etapaCors(requisicao({ origem: null }), CONFIG), null);
   });
 
   it('atende preflight da origem configurada', () => {
@@ -294,6 +305,53 @@ describe('executarPipeline — caminho feliz', () => {
     restaurar();
 
     assertEquals(resposta.headers.get('Access-Control-Allow-Origin'), CONFIG.appOrigin);
+  });
+
+  it('requisição sem Origin chega ao fim, que é o caminho real do aplicativo', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase();
+
+    // Este é o teste que faltava: ele exercita a costura entre a Server Action, que chama por
+    // `fetch` de Node e não emite `Origin`, e a função. Nenhuma suíte isolada enxergava o
+    // contrato entre as duas, e por isso 35 passos verdes coexistiam com a funcionalidade
+    // inteira quebrada.
+    const resposta = await executarPipeline(requisicao({ token: 'ok', origem: null }), deps);
+    const corpo = await resposta.json();
+
+    restaurar();
+
+    assertEquals(resposta.status, 201);
+    assertEquals((corpo as { vaga: typeof VAGA }).vaga.id, 'vaga-1');
+    assertEquals(rastros.buscar, 1, 'a extração chegou a rodar');
+    assertEquals(rastros.inserir, 1);
+  });
+
+  it('ausência de Origin não dispensa autenticação', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase({ autenticar: () => Promise.resolve(null) });
+
+    const resposta = await executarPipeline(requisicao({ token: 'invalido', origem: null }), deps);
+
+    restaurar();
+
+    assertEquals(resposta.status, 401);
+    assertEquals(rastros.buscar, 0, 'nenhuma extração sem sessão');
+    assertEquals(rastros.inserir, 0);
+  });
+
+  it('ausência de Origin não dispensa a allowlist', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase({
+      autenticar: () => Promise.resolve({ id: USUARIO.id, email: 'estranho@exemplo.com' }),
+    });
+
+    const resposta = await executarPipeline(requisicao({ token: 'ok', origem: null }), deps);
+
+    restaurar();
+
+    assertEquals(resposta.status, 403);
+    assertEquals(rastros.buscar, 0, 'nenhuma extração fora da allowlist');
+    assertEquals(rastros.inserir, 0);
   });
 });
 
@@ -509,5 +567,55 @@ describe('logging', () => {
     assertMatch(tudo, /etapa=sucesso/);
     assertMatch(tudo, /empresa\.com/);
     assertEquals(tudo.includes(USUARIO.id), false);
+  });
+
+  it('nomeia a origem recusada, para o 403 não ser um mistério', async () => {
+    const restaurar = silenciarLogs();
+    const { deps } = depsBase();
+
+    await executarPipeline(requisicao({ token: 'ok', origem: 'https://evil.com' }), deps);
+    const logs = restaurar();
+
+    // `silenciarLogs` junta a string de formato com os argumentos, sem interpolar — por isso o
+    // valor da origem aparece solto, depois do `origem=%s`.
+    const tudo = logs.join('\n');
+    assertMatch(tudo, /origem=%s/, 'o campo da origem precisa estar no formato do log');
+    assertMatch(tudo, /https:\/\/evil\.com:recusada/);
+  });
+
+  it('nomeia a origem configurada como aceita', async () => {
+    const restaurar = silenciarLogs();
+    const { deps } = depsBase({
+      autenticar: () => Promise.resolve({ id: USUARIO.id, email: 'estranho@exemplo.com' }),
+    });
+
+    await executarPipeline(requisicao({ token: 'ok' }), deps);
+    const logs = restaurar();
+
+    assertMatch(logs.join('\n'), /http:\/\/localhost:3000:aceita/);
+  });
+
+  it('nomeia a origem ausente como aceita, que é o caminho do aplicativo', async () => {
+    const restaurar = silenciarLogs();
+    const { deps } = depsBase({
+      autenticar: () => Promise.resolve({ id: USUARIO.id, email: 'estranho@exemplo.com' }),
+    });
+
+    await executarPipeline(requisicao({ token: 'ok', origem: null }), deps);
+    const logs = restaurar();
+
+    assertMatch(logs.join('\n'), /ausente:aceita/);
+  });
+
+  it('limita o tamanho da origem que vem do chamador', async () => {
+    const restaurar = silenciarLogs();
+    const enorme = `https://${'a'.repeat(500)}.com`;
+    const { deps } = depsBase();
+
+    await executarPipeline(requisicao({ token: 'ok', origem: enorme }), deps);
+    const logs = restaurar();
+
+    const linha = logs.find((l) => l.includes('origem=')) ?? '';
+    assertEquals(linha.length < 400, true, `origem sem limite no log: ${linha.length} chars`);
   });
 });
