@@ -16,19 +16,19 @@
 
 ## 2. Next: tradução por `code`, com fallback por status
 
-- [ ] 2.1 Acrescentar `nao_autorizado` e `origem_nao_permitida` a `CodigoErroIngestao` e a `MENSAGENS` em
+- [x] 2.1 Acrescentar `nao_autorizado` e `origem_nao_permitida` a `CodigoErroIngestao` e a `MENSAGENS` em
   `src/app/actions/erros.ts`, com frases que não revelem se um endereço consta da allowlist (D3), e verificar
   com `npm run typecheck` que o conjunto fechado continua fechando a compilação
-- [ ] 2.2 Fazer `mapearErroIngestao` derivar o código de decisão do campo `code` do corpo quando reconhecido, e
+- [x] 2.2 Fazer `mapearErroIngestao` derivar o código de decisão do campo `code` do corpo quando reconhecido, e
   recorrer ao status apenas como fallback, mantendo o log `[acoes/erros]` com `code_funcao`, e verificar com
   `npm test` que os testes existentes de 409/422/429/401 continuam verdes
-- [ ] 2.3 Acrescentar em `erros.test.ts` os casos de `403 nao_autorizado` e `403 origem_nao_permitida` com
+- [x] 2.3 Acrescentar em `erros.test.ts` os casos de `403 nao_autorizado` e `403 origem_nao_permitida` com
   mensagem própria, o de `code` desconhecido caindo no status, e o de corpo sem `code` caindo no status,
   verificando com `npm test`
 
 ## 3. Verificação da integração
 
-- [ ] 3.1 Rodar a verificação completa (`npm run verificar`) e confirmar typecheck, vitest, pgTAP e testes da
+- [x] 3.1 Rodar a verificação completa (`npm run verificar`) e confirmar typecheck, vitest, pgTAP e testes da
   função verdes
 - [ ] 3.2 Implantar **a função primeiro** (`scripts/configurar-edge-function.sh`) e só depois subir o app, para
   que nenhuma janela tenha app novo contra função antiga; conferir com `curl` na rota da função que uma

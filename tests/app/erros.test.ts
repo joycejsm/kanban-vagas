@@ -16,6 +16,15 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
+/** O `code` de um corpo, lido como a produção lê: só se for string. */
+function extrairCode(corpo: unknown): string | undefined {
+  if (typeof corpo === 'object' && corpo !== null && 'code' in corpo) {
+    const { code } = corpo as { code?: unknown };
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 describe('mapearErroIngestao — status conhecidos', () => {
   it('409 vira duplicada, com aviso de vaga já cadastrada', () => {
     const falha = mapearErroIngestao(409);
@@ -45,15 +54,85 @@ describe('mapearErroIngestao — status conhecidos', () => {
     expect(falha.mensagem).toMatch(/mais tarde/i);
   });
 
-  it('401 e 403 viram o mesmo pedido de novo login', () => {
+  it('401 e 403 sem code viram o mesmo pedido de novo login', () => {
     const semPermissao = mapearErroIngestao(401);
     const proibido = mapearErroIngestao(403);
 
     expect(semPermissao.code).toBe('sessao_expirada');
     expect(proibido.code).toBe('sessao_expirada');
-    // A tela não distingue "não autenticado" de "não autorizado": para o usuário, a
-    // resposta é a mesma, e distinguishable seria dar informação sobre a configuração do app.
+    // Sem `code` no corpo — o fallback, que vale durante o deploy e para qualquer resposta
+    // inesperada — a tela não distingue "não autenticado" de "não autorizado", porque o status
+    // 403 sozinho não carrega essa diferença. Com `code`, os dois se separam: ver o bloco
+    // seguinte, que é o caminho real, já que a função sempre manda o `code`.
     expect(semPermissao).toEqual(proibido);
+  });
+});
+
+describe('mapearErroIngestao — o code da função decide', () => {
+  it('403 de e-mail fora da allowlist não vira sessão expirada', () => {
+    const falha = mapearErroIngestao(403, { code: 'nao_autorizado', message: 'x' });
+
+    expect(falha.code).toBe('nao_autorizado');
+    expect(falha.mensagem).toMatch(/permissão/i);
+    expect(falha.mensagem).not.toMatch(/sessão expirou/i);
+  });
+
+  it('403 de origem não permitida não vira sessão expirada', () => {
+    const falha = mapearErroIngestao(403, { code: 'origem_nao_permitida', message: 'x' });
+
+    expect(falha.code).toBe('origem_nao_permitida');
+    expect(falha.mensagem).not.toMatch(/sessão expirou/i);
+  });
+
+  it('a mensagem de allowlist não diz se o endereço está na lista', () => {
+    // Responder a quem não tem conta se um endereço tem acesso transforma a recusa em oráculo
+    // sobre a allowlist. A ação indicada é a mesma nos dois casos, então a frase não precisa
+    // revelar nada.
+    const mensagem = mapearErroIngestao(403, { code: 'nao_autorizado', message: 'x' }).mensagem;
+
+    expect(mensagem).not.toMatch(/@|não está na lista|não consta|autorizado na lista/i);
+  });
+
+  it('401 continua sendo sessão expirada mesmo com code no corpo', () => {
+    const falha = mapearErroIngestao(401, { code: 'nao_autenticado', message: 'x' });
+
+    expect(falha.code).toBe('sessao_expirada');
+    expect(falha.mensagem).toBe(mapearErroIngestao(401).mensagem);
+  });
+
+  it('code desconhecido recua para o status, sem quebrar o conjunto fechado', () => {
+    for (const status of [403, 409, 422, 429, 500]) {
+      const comCode = mapearErroIngestao(status, { code: 'algo_que_nao_existe' });
+      const semCorpo = mapearErroIngestao(status);
+
+      expect(comCode).toEqual(semCorpo);
+    }
+  });
+
+  it('cada code da função tem destino, e nenhum vira erro genérico sem querer', () => {
+    // Lista extraída de `_shared/erros.ts`. Um code novo na função sem entrada aqui cairia
+    // silenciosamente no fallback por status, que é o mesmo modo de falha que motivou a
+    // mudança: duas causas, uma mensagem. Status e destino ficam na mesma linha de propósito —
+    // separadas, um code poderia ficar sem status e o teste não perceberia.
+    const ESPERADOS: { code: string; status: number; esperado: string }[] = [
+      { code: 'nao_autenticado', status: 401, esperado: 'sessao_expirada' },
+      { code: 'nao_autorizado', status: 403, esperado: 'nao_autorizado' },
+      { code: 'origem_nao_permitida', status: 403, esperado: 'origem_nao_permitida' },
+      { code: 'metodo_nao_permitido', status: 405, esperado: 'erro' },
+      { code: 'vaga_duplicada', status: 409, esperado: 'duplicada' },
+      { code: 'pagina_grande', status: 413, esperado: 'extracao_falhou' },
+      { code: 'corpo_invalido', status: 422, esperado: 'extracao_falhou' },
+      { code: 'extracao_insuficiente', status: 422, esperado: 'extracao_falhou' },
+      { code: 'tipo_nao_suportado', status: 422, esperado: 'extracao_falhou' },
+      { code: 'url_invalida', status: 422, esperado: 'extracao_falhou' },
+      { code: 'limite_de_uso', status: 429, esperado: 'limite_uso' },
+      { code: 'erro_interno', status: 500, esperado: 'erro' },
+      { code: 'pagina_inacessivel', status: 502, esperado: 'extracao_falhou' },
+    ];
+
+    for (const { code, status, esperado } of ESPERADOS) {
+      expect(mapearErroIngestao(status, { code }).code, `code ${code}`).toBe(esperado);
+    }
   });
 });
 
@@ -97,7 +176,15 @@ describe('mapearErroIngestao — o corpo da resposta nunca vaza', () => {
       const serializado = JSON.stringify(falha);
 
       expect(serializado).not.toMatch(/relation|constraint|SELECT|vagas|at Object|\.ts:|html|candidates/i);
-      expect(falha.mensagem).toBe(mapearErroIngestao(422).mensagem);
+
+      // A referência é a mesma chamada com o **mesmo** `code` e um corpo vazio. A mensagem
+      // pode variar com o `code` — ele decide o que a tela mostra —, mas nunca com o resto do
+      // corpo. Comparar com `mapearErroIngestao(422)` sem corpo só valia quando o status era a
+      // única entrada; agora a igualdade que importa é "o resto do corpo não muda nada".
+      const codigo = extrairCode(corpo);
+      const referencia = mapearErroIngestao(422, codigo === undefined ? undefined : { code: codigo });
+
+      expect(falha.mensagem).toBe(referencia.mensagem);
     });
   }
 
@@ -112,6 +199,13 @@ describe('mapearErroIngestao — o corpo da resposta nunca vaza', () => {
     const comCorpo = mapearErroIngestao(409, { code: 'vaga_duplicada', message: 'detalhe' }).mensagem;
 
     expect(comCorpo).toBe(semCorpo);
+  });
+
+  it('o code tem precedência sobre o status, porque o status não distingue as recusas', () => {
+    // A função responde 403 tanto para e-mail fora da allowlist quanto para origem não
+    // permitida. Decidir pelo status achatava as duas em "sua sessão expirou".
+    expect(mapearErroIngestao(403, { code: 'nao_autorizado' }).code).toBe('nao_autorizado');
+    expect(mapearErroIngestao(403, { code: 'origem_nao_permitida' }).code).toBe('origem_nao_permitida');
   });
 });
 

@@ -56,6 +56,10 @@ const APARENCIA_POR_CODIGO: Record<CodigoErroIngestao, AparenciaDoAviso> = {
   extracao_falhou: 'erro',
   limite_uso: 'aviso',
   sessao_expirada: 'erro',
+  // Nenhum dos dois oferece o campo de texto colado: a falha é de permissão ou de origem, não
+  // de extração, e colar o anúncio não resolve nenhuma das duas.
+  nao_autorizado: 'erro',
+  origem_nao_permitida: 'erro',
   erro: 'erro',
 };
 
