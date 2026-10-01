@@ -34,8 +34,15 @@
 ## 4. Verificação e registro
 
 - [x] 4.1 Rodar `npm run verificar` e confirmar typecheck, vitest, pgTAP e testes da função verdes
-- [ ] 4.2 Implantar a função (`supabase functions deploy ingest-vaga`) e conferir por `curl` que uma
-  requisição autenticada sem `Origin` deixa de responder `500` na etapa de auditoria
+- [x] 4.2 Implantar a função (`supabase functions deploy ingest-vaga`)
+  - Feito: **versão 4** em 2026-10-01 05:03:35 UTC (a 3, de 01:48:22, tinha o defeito). Commit `337bd12`.
+  - O `curl` **autenticado** previsto nesta task **não é executável**: a etapa de auditoria vem depois
+    de autenticação e allowlist, e o gateway recusa (`401 UNAUTHORIZED_NO_AUTH_HEADER`) antes do corpo
+    da função rodar. Sem token de produção — que só se obtém por login Google no navegador — nenhum
+    `curl` alcança a contagem. O que o `curl` sem token confirma, e foi confirmado: função no ar e
+    `verify_jwt` ligado.
+  - **A prova de que a auditoria parou de dar `500` é a task 3.3**, no navegador: com URL da Gupy o
+    resultado esperado é `422` pedindo o texto colado.
 - [x] 4.3 Registrar em `DEBUG-login-hook.md` (ou no arquivo de handoff vigente) que o filtro do PostgREST é um
   valor e que `head: true` esconde o corpo do erro — a soma dos dois é o que tornou este defeito invisível
 - [x] 4.4 Anotar no handoff a medição da Gupy (3.905 bytes de casca de React) como a **próxima** change, para

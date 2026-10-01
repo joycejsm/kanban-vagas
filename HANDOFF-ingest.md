@@ -57,7 +57,7 @@ script.
 ⚠️ **3.3 muda de resultado esperado.** Com URL da Gupy a resposta passa a ser `422` pedindo o texto
 colado, não `201` — ver a seção 3. Um `422` ali é o primeiro sinal de que o pipeline inteiro rodou.
 
-## 3. O erro do teste manual — RESOLVIDO, e o conserto ainda não foi implantado
+## 3. O erro do teste manual — RESOLVIDO, consertado e implantado (v4)
 
 O `resultado = 'pendente'` **não** era morte por tempo nem `marcarDesfecho` falhando — as duas
 hipóteses do handoff anterior. Era uma terceira.
@@ -80,22 +80,26 @@ camada de dados está saudável.
 
 ### O que o conserto faz
 
-`openspec/changes/fix-ingest-audit-window-and-outcome/` — **12/13 tasks**, a 4.2 (deploy) é a que
-falta. Janela em ISO 8601 calculada no isolate (as duas do mesmo instante); registro e contagem
-viraram etapas separadas; desfecho gravado pelo `id` criado, não por "a pendente mais recente";
-etapa `auditoria` nomeada no log; falha ao fechar a linha aparece no log em vez de sumir.
+`openspec/changes/fix-ingest-audit-window-and-outcome/` — **12/13 tasks**: a 4.2 está implantada, e
+a parte do `curl` autenticado dela **não é executável** (ver "Implantado" abaixo). Janela em ISO 8601
+calculada no isolate (as duas do mesmo instante); registro e contagem viraram etapas separadas; desfecho
+gravado pelo `id` criado, não por "a pendente mais recente"; etapa `auditoria` nomeada no log; falha ao
+fechar a linha aparece no log em vez de sumir.
 
-### O primeiro passo da próxima sessão
+### Implantado — versão 4
 
-**Implantar.** Nada disso está em produção ainda — a versão implantada continua com o defeito:
+Commit `337bd12`, implantado em **2026-10-01 05:03:35 UTC**. A anterior era a versão 3, de
+01:48:22, que tinha o defeito. O gateway responde `401 UNAUTHORIZED_NO_AUTH_HEADER` para requisição
+sem token, com e sem `Origin` — confirma que a função subiu e que `verify_jwt` continua ligado.
 
-```bash
-supabase functions deploy ingest-vaga
-```
+**O que ainda não foi provado é a correção da auditoria em si.** A etapa de auditoria vem depois de
+autenticação e allowlist, e o gateway recusa antes do corpo da função rodar: **nenhum `curl` sem
+token alcança a contagem**. Prová-lo exige token de produção, e não há como obter um sem login
+Google pelo navegador. Na prática, a prova é a task **3.3**: colar a URL da Gupy e ver que o
+resultado é `422` pedindo o texto colado, e não `500`.
 
-Depois, `curl` autenticado sem `Origin` para confirmar que deixou de ser `500` na auditoria. O CLI
-desta máquina (2.118.0) **não** tem `supabase functions logs`; para o log da função, o dashboard:
-`https://supabase.com/dashboard/project/lpibbdvxpsqqujmnqydk/functions/ingest-vaga`.
+O CLI desta máquina (2.118.0) **não** tem `supabase functions logs`; para o log da função, o
+dashboard: `https://supabase.com/dashboard/project/lpibbdvxpsqqujmnqydk/functions/ingest-vaga`.
 
 ## 3-bis. Próxima change: a Gupy devolve casca de React, não a vaga
 
@@ -140,30 +144,17 @@ comparar listas por md5 sem nunca imprimir o conteúdo. A `ALLOWED_EMAILS` da Ed
 de `public.allowed_emails` e sai de lá por comando, nunca digitada — foi a divergência entre as três
 listas que quebrou o login nesta semana.
 
-## 6. Não commitado
+## 6. Estado da árvore
 
-Nada foi commitado nesta sessão. Este é o estado exato da árvore:
+**Limpa.** Tudo foi commitado em `337bd12` e implantado em produção (v4).
 
-```
- M supabase/functions/ingest-vaga/_shared/pipeline.ts        conserto da contagem e do desfecho
- M supabase/functions/ingest-vaga/_shared/supabase.ts         janela em ISO 8601, desfecho por id
- M supabase/functions/ingest-vaga/_shared/pipeline.test.ts
- M supabase/functions/ingest-vaga/_shared/supabase.test.ts
- M supabase/functions/ingest-vaga/index.ts                    composição das dependências
-?? openspec/changes/fix-ingest-audit-window-and-outcome/     change nova, completa
- M DEBUG-login-hook.md / README.md / HANDOFF-ingest.md        docs das tasks 4.1-4.4
- M openspec/changes/fix-ingest-audit-window-and-outcome/…    tasks 1.1-3.5, 4.1, 4.3, 4.4 marcadas
- M openspec/changes/fix-ingest-origin-and-error-codes/tasks.md  tasks 4.1 e 4.2 marcadas
-```
-
-Verificação no fim desta sessão: typecheck limpo, **292** vitest, pgTAP **PASS**, **168** passos da
-função (39 testes; eram 153 passos / 35 testes).
-
-### Sujeira deixada no ambiente local
-
-Nada disso é produção, mas convém saber que existe:
+O que sobrou foi a sujeira do ambiente local, e é o que a próxima sessão deve saber:
 
 - `supabase functions serve` continua rodando em background (PID 1112171), com o env-file
-  `/tmp/env-funcao-1112126.env` — **modo 600, contém `GEMINI_API_KEY` real**.
-- `/tmp/token-local` existe e está em **modo 664** (o env-file está 600; o token não).
+  `/tmp/env-funcao-1112126.env` — modo 600, contém `GEMINI_API_KEY` real.
+- `/tmp/token-local` é um token da **stack local**; foi corrigido de 664 para **600** nesta sessão.
+  Não é token de produção, e não serve para provar a 4.2.
 - Um usuário de teste e duas linhas de auditoria na **stack local**, não na remota.
+
+A stack local pode ser derrubada sem perda: o deploy já foi feito e nenhuma tarefa pendente depende
+dela.
