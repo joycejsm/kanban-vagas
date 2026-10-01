@@ -1,10 +1,32 @@
 # Handoff — sessão encerrada em 2026-10-01
 
-Estado no fim da sessão. O erro do teste manual foi **diagnosticado e consertado** — mas o conserto
-ainda **não está commitado nem implantado**. Duas coisas em aberto, nesta ordem:
+## Resumo de encerramento
 
-1. a change `fix-ingest-audit-window-and-outcome` (código pronto e verificado, **falta o deploy**);
-2. a extração da Gupy, que é a **próxima change** e só fica demonstrável depois do deploy.
+**O que deu certo.** A ingestão por URL funciona em produção. Três mudanças, três commits, uma
+implantação. O que era "a funcionalidade nunca funcionou" passou a "funciona, com a extração
+melhorável":
+
+1. `22a451f` + `0e8bab0` — a chamada servidor-para-servidor não carrega `Origin`, e o `403` deixou de
+   virar "sua sessão expirada". Commitados antes desta sessão.
+2. `337bd12` — **a auditoria conserta e implantada (v4, 05:03:35 UTC)**. Era o bloqueio real: a
+   contagem de janela mandava SQL como valor de filtro, o PostgREST recusava com `22007`, e como o
+   filtro usava `head: true` o erro chegava sem mensagem. Nenhuma requisição passava do limite de uso.
+3. `7e159de` — change `fix-ld-json-entity-decoding`, que remove a dependência do Gemini nas vagas da
+   Gupy. **Proposta, sem código escrito.**
+
+**A prova, fora da tela.** Doze tentativas na auditoria de produção, sete delas falhas, e **nenhuma
+linha `pendente`**. Todos os desfechos foram gravados: 3 `sucesso`, 2 `duplicada`, 7 `erro`. Essa era a
+promessa do conserto, e é o número que importa.
+
+**O que ficou errado no caminho, e vale mais que o conserto.** A change anterior foi escrita sobre uma
+medição falsa — a Gupy "devolve 3.905 bytes de casca de React" era a página de *autenticação*, não uma
+página de vaga. A mesma página do handoff já dizia "140 KB" e "3.905 bytes" para a Gupy, lado a lado.
+Ver a seção 3-bis.
+
+## Em uma linha
+
+A ingestão funciona. O `fix-ld-json-entity-decoding` é o próximo passo, e ele é **desacelerar**: tirar
+uma chamada ao modelo do caminho principal, não adicionar capacidade.
 
 ## 1. O login por Google está resolvido
 
@@ -101,20 +123,38 @@ resultado é `422` pedindo o texto colado, e não `500`.
 O CLI desta máquina (2.118.0) **não** tem `supabase functions logs`; para o log da função, o
 dashboard: `https://supabase.com/dashboard/project/lpibbdvxpsqqujmnqydk/functions/ingest-vaga`.
 
-## 3-bis. Próxima change: a Gupy devolve casca de React, não a vaga
+## 3-bis. A Gupy funciona — e o defeito é o `ld+json` escapado
 
-Medido enquanto se reproduzia o defeito da auditoria: a página da Gupy
-(`carreirasomie.gupy.io/job/...`) responde `200` com **3.905 bytes** de casca de React
-(`<div id="candidates-root">`, `<noscript>You need to enable JavaScript to run this app.</noscript>`).
-Não há `JobPosting` em JSON-LD nem texto visível — o anúncio é montado no cliente. A extração
-devolve campos vazios e a resposta vira `422` pedindo o texto colado.
+A seção anterior afirmava que a Gupy devolvia 3.905 bytes de casca de React sem `JobPosting`. **Era
+falso**, e a premissa daquela change estava errada. Medido nas URLs reais:
 
-**É outra change**, e ela só fica demonstrável depois do deploy acima: este conserto faz a requisição
-*chegar* à extração, não faz a extração funcionar na Gupy. Colar a URL da Gupy deve dar `422` — se
-voltar a dar `500`, o conserto da auditoria não chegou.
+| host | resposta | `ld+json` | `extrairTexto` | desfecho |
+|---|---|---|---|---|
+| `carreirasomie.gupy.io` | 200, 117 KB | `JobPosting` completo | 3.480 chars | `sucesso` ×2 |
+| `stefanini.gupy.io` | 200, 118 KB | `JobPosting` completo | 5.680 chars | `sucesso` (1 de 4) |
+| `carreiras.inhire.app` | 200, 12,6 KB | **nenhum** | **6 chars** (`"InHire"`) | `erro` ×3 |
 
-Nota de um teste local: a extração falhou uma vez com `503 high demand` do Gemini. Transitório —
-`gemini-3.5-flash` responde `200`.
+O `ld+json` da Gupy começa com `{&quot;@context&quot;…}` — o JSON vem **escapado como HTML**. Dentro de
+`<script>` as entidades não são decodificadas, então `JSON.parse` lança, o `catch` engole e
+`extrairLdJson` devolve `null`. Toda vaga da Gupy é extraída pelo modelo quando não precisa, e some
+quando o modelo está indisponível. A Stefanini falhou 3 de 4 por `503 high demand` — transitório, e
+irrelevante, porque nenhuma chamada era necessária.
+
+A Inhire é limitação, não defeito: `extrairTexto` devolve 6 caracteres e não há dado em nenhum
+formato. O `422` pedindo o texto colado é o comportamento correto, e o fallback existe.
+
+Change aberta: `fix-ld-json-entity-decoding` — 12 tasks, sem código escrito ainda. Ver
+`openspec/changes/fix-ld-json-entity-decoding/`.
+
+### A lição da medição errada
+
+Os 3.905 bytes vieram de `/candidates/auth`, a página de autenticação — não de uma página de vaga. É a
+mesma origem e uma página completamente diferente. Pior: o handoff já registrava "140 KB de conteúdo
+real" **e** "3.905 bytes" para a Gupy. A contradição estava escrita no documento e ninguém parou para
+resolver antes de escrever a change.
+
+Duas regras: **teste a URL que o sistema processa**, e **duas medições que se discordam são sinal, não
+incômodo**.
 
 ## 4. Estado do ambiente
 
@@ -144,17 +184,30 @@ comparar listas por md5 sem nunca imprimir o conteúdo. A `ALLOWED_EMAILS` da Ed
 de `public.allowed_emails` e sai de lá por comando, nunca digitada — foi a divergência entre as três
 listas que quebrou o login nesta semana.
 
-## 6. Estado da árvore
+## 6. Estado da árvore e o que falta
 
-**Limpa.** Tudo foi commitado em `337bd12` e implantado em produção (v4).
+**Limpa**, exceto pela change nova desta sessão. Commits: `337bd12` (o conserto), `222cd92` e `93d9f27`
+(docs), `7e159de` (a change). Produção está na **v4**.
 
-O que sobrou foi a sujeira do ambiente local, e é o que a próxima sessão deve saber:
+### Falta resolver
 
-- `supabase functions serve` continua rodando em background (PID 1112171), com o env-file
-  `/tmp/env-funcao-1112126.env` — modo 600, contém `GEMINI_API_KEY` real.
-- `/tmp/token-local` é um token da **stack local**; foi corrigido de 664 para **600** nesta sessão.
-  Não é token de produção, e não serve para provar a 4.2.
-- Um usuário de teste e duas linhas de auditoria na **stack local**, não na remota.
+1. **`fix-ld-json-entity-decoding`** — 12 tasks, proposta pronta, nenhum código escrito. É o próximo
+   passo e é *desacelerar*: tira uma chamada ao Gemini do caminho principal e faz os requisitos
+   aparecerem. Task 3.2 prova a retirada da dependência sem depender do Gemini estar de pé.
+2. **Task 3.4** da `fix-ingest-origin-and-error-codes` — a última de código: e-mail fora da allowlist
+   tem que mostrar "falta de permissão" e **não** "sua sessão expirada". Só no navegador.
+3. **A limpeza de `extrairListaDaDescricao`**, por decisão da usuária: depois do conserto da change
+   acima, o primeiro requisito ainda sai como `"Descrição da vagaA Omie tem como propósito…"`, porque
+   o limpador não separa o cabeçalho `<h2>` do texto. Change própria, para não misturar duas causas.
+4. **Limpeza do ambiente local** — o `functions serve` (PID 1112171) e o env-file
+   `/tmp/env-funcao-1112126.env` (modo 600, com `GEMINI_API_KEY` real) continuam de pé, e
+   `/tmp/token-local` existe (corrigido de 664 para 600). Um usuário de teste e duas linhas de
+   auditoria na **stack local**, não na remota. Nada disso é produção e nada mais depende de nada
+   disso: a stack pode ser derrubada à vontade.
 
-A stack local pode ser derrubada sem perda: o deploy já foi feito e nenhuma tarefa pendente depende
-dela.
+### O que não dá para automatizar
+
+As tasks de navegador (3.3 foi feita, 3.4 falta) porque o projeto só tem login Google e o login por
+senha está desabilitado. E a verificação por `curl` autenticado da 4.2 também não é possível: a etapa de
+auditoria vem depois de autenticação, e o gateway recusa antes do corpo da função rodar. Não há como
+obter token de produção sem passar pelo navegador.
