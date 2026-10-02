@@ -211,3 +211,129 @@ As tasks de navegador (3.3 foi feita, 3.4 falta) porque o projeto só tem login 
 senha está desabilitado. E a verificação por `curl` autenticado da 4.2 também não é possível: a etapa de
 auditoria vem depois de autenticação, e o gateway recusa antes do corpo da função rodar. Não há como
 obter token de produção sem passar pelo navegador.
+
+---
+
+## 7. Segunda sessão do mesmo dia — a identidade visual
+
+> As seções 1 a 6 descrevem o encerramento da **primeira** sessão de 2026-10-01. Esta seção é o
+> estado do repositório depois da segunda. A seção 6 continua válida como registro do que era
+> verdade naquele momento; o que mudou está aqui.
+
+### O que foi feito
+
+**`bd5bc1c`** — a premissa falsa da Gupy, corrigida **na change que a escreveu**. Não era o
+`HANDOFF` que ainda afirmava os 3.905 bytes: era o `proposal.md` e o `design.md` da
+`fix-ingest-audit-window-and-outcome`, que estava com 15/15 tasks e pronta para arquivar. A
+task 4.1 da change seguinte apontava para o arquivo errado. Saiu junto a expectativa de `422` com
+URL da Gupy, que aparecia em três lugares e coexistia com a própria correção no mesmo arquivo.
+
+**`5f2673e`** — a UI. Base marrom-quase-preto em vez de branco, texto creme, nenhum azul de link,
+aviso em terracota e ocre, e um tom próprio por coluna. Fontes: **Fraunces** nos títulos (o eixo
+`WONK` é o traço da identidade), **IBM Plex Sans** no corpo, **IBM Plex Mono** em rótulos,
+contagens e metadados. Todos os tokens em `globals.css`, nenhum componente escreve um hexadecimal.
+
+### A verificação da CSP, medida e não suposta
+
+O comentário antigo do `layout.tsx` dizia que uma fonte exigiria `style-src`/`font-src` e uma
+decisão de segurança da Fase 3. Isso descreve `<link>` para um CDN. O `next/font` é outra coisa:
+**baixa a fonte no build** e serve em `/_next/static/media/`, na própria origem, com as regras
+`@font-face` numa folha servida de lá. Conferido no HTML entregue:
+
+- `font-src 'self'` **continua valendo**, nenhuma requisição para fora;
+- **zero `<style>` inline** — e é essa ausência que dispensa `style-src`, porque a diretiva cairia
+  em `default-src 'self'` e bloquearia estilo inline sem nonce;
+- os `@font-face` apontam para `url(media/….woff2)`, caminho relativo, mesma origem.
+
+A CSP **não foi tocada**.
+
+### Duas armadilhas que só apareceram ao renderizar de verdade
+
+Nenhuma delas passa por typecheck ou por teste, e as duas estão documentadas no código.
+
+1. **Classe montada por interpolação não existe.** A primeira versão usava
+   `border-l-${corDaColuna(status)}`. O Tailwind varre o **texto** dos arquivos: uma classe
+   montada em runtime não aparece em lugar nenhum do código-fonte e **não entra no CSS** — sem erro,
+   sem aviso, coluna sem cor. `src/quadro/aparencia.ts` devolve classes **escritas por extenso**
+   (`border-l-coluna-aplicado`), e a repetição é o preço da correção aparecendo no diff.
+2. **Glifo fora do subset.** A seta `↗` (U+2197) do link saía como **caixa vazia** no meio do card:
+   o subset latino do IBM Plex Mono cobre U+2191, U+2192, U+2193 e U+2195, e **não** U+2197. Virou
+   `→`. O glifo precisa estar no `unicode-range`, não só existir no arquivo.
+
+Também: o comentário da textura prometia uma vinheta radial que **nunca tinha sido escrita**, e que
+escrita no `<html>` ficaria invisível sob o `background-color` opaco do `<body>`. Está agora na
+regra do `body`, com `min-height: 100vh`.
+
+### O único teste que mudou
+
+`tests/quadro/render.test.ts` fixava a contagem como `>2<` e `>0<`; ela passa a sair como `02` e
+`00`. A **intenção** do teste — um 2 e quatro 0, um por coluna — é a mesma, então a asserção foi
+atualizada em vez de a notação desfeita. Nada mais da suíte foi tocado: 292 testes verdes.
+
+### Como conferir a UI sem subir nada
+
+O `next dev` do usuário estava de pé, mas o quadro exige sessão e o projeto só tem login Google.
+O que serviu foi um **preview estático**: um teste temporário renderiza `<Quadro>` e
+`<FormularioNovaVaga>` com `renderToStaticMarkup`, joga o HTML em `/tmp/preview/body.html` junto
+do CSS compilado (`.next/static/chunks/*.css`, com `url(../media/` → `url(media/` e os `.woff2`
+copiados para `/tmp/preview/media/`), e o Chrome headless tira a foto:
+
+```
+google-chrome --headless --disable-gpu --no-sandbox --hide-scrollbars \
+  --window-size=1600,760 --screenshot=/tmp/preview/quadro.png --virtual-time-budget=6000 body.html
+```
+
+O Chrome está instalado. O teste que gerava o HTML foi removido — ele escrevia em `/tmp` sem
+condição, e não pode ficar na suíte. **As classes de fonte no `<html>` são com hash** e mudam a cada
+build: pegue-as do HTML servido, não as adivinhe. Adivinhar foi o que fez o Fraunces parecer ausente
+na primeira foto, quando o defeito era do preview.
+
+### ⚠️ O push não saiu
+
+```
+fatal: could not read Username for 'https://github.com'
+```
+
+Não é permissão do repositório: é credencial. O remote é HTTPS, não há `gh` instalado, não há
+credential helper, e a `~/.ssh/id_ed25519.pub` **não** está registrada no GitHub
+(`Permission denied (publickey)`).
+
+**A Atenção que importa:** o `origin/main` tem **1 commit** ("feat: fases 1 e 2 parciais"). O local
+tem **29**. São **28 commits a frente** — nada desde as fases 1 e 2 foi para o remoto. O primeiro
+passo da sessão que vem é `! git push origin main`, e vale olhar o diff antes: são 28 commits,
+não 2.
+
+### Estado do repositório
+
+Árvore limpa. `bd5bc1c` e `5f2673e` são desta sessão. Typecheck limpo, 292 testes verdes, build
+ok. Produção continua na **v4** da função `ingest-vaga` — nada foi implantado nesta sessão, e a
+**UI nova não está em produção**.
+
+`next-env.d.ts` é rastreado e o Next 16 reescreve os `import` entre `./.next/types/` e
+`./.next/dev/types/` conforme o último comando rodado. Ele suja a árvore sozinho depois de
+`build` ou `dev`; foi revertido aqui. Se aparecer num `git status`, é isso.
+
+### O que falta, em ordem
+
+1. **`! git push origin main`** — 28 commits. Bloqueia tudo.
+2. **Implantar a UI.** Commitada, não em produção. Não sei como o Next é implantado neste projeto.
+3. **`fix-ld-json-entity-decoding`** — 12 tasks, 0 feitas. Continua sendo o próximo passo de
+   *código*, e é desacelerar: tira uma chamada ao Gemini do caminho principal. A task 3.2 prova a
+   retirada da dependência sem depender do Gemini estar de pé.
+4. **Task 3.4** da `fix-ingest-origin-and-error-codes` — só no navegador: e-mail fora da allowlist
+   tem que mostrar "falta de permissão" e **não** "sua sessão expirada".
+5. **Arquivar** `fix-ingest-audit-window-and-outcome` — 15/15, nenhuma pendente. É a change da
+   medição falsa que a sessão passada corrigiu.
+6. **A limpeza de `extrairListaDaDescricao`**, por decisão da usuária: depois do conserto do item 3,
+   o primeiro requisito ainda sai como `"Descrição da vagaA Omie tem como propósito…"`. Change
+   própria, para não misturar duas causas.
+
+### Ambiente local (nada disso é produção, e nada mais depende)
+
+O `supabase functions serve` (PID 1112171) e o `edge-runtime` (PID 1214361) continuam de pé;
+`/tmp/env-funcao-1112126.env` (modo 600, com a `GEMINI_API_KEY` real) e `/tmp/token-local`
+(modo 600) existem; há um usuário de teste e duas linhas de auditoria na **stack local**, não na
+remota. Pode ser derrubado à vontade — apagar o token local é irreversível, então preferi não mexer.
+
+Efeito colateral desta sessão: o teste de chave SSH adicionou `github.com` ao `~/.ssh/known_hosts`.
+Inofensivo, mas foi a agente.
