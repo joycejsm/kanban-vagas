@@ -39,8 +39,10 @@
     colunas e remover funcionaram. Confirmado fora da tela também: `ingest_log` tem
     `resultado = 'sucesso'` às 05:10:57, depois do deploy das 05:03:35, e **nenhum `pendente` novo** —
     a linha órfã das 01:50:47 é da versão quebrada.
-- [ ] 3.4 Com um e-mail fora da allowlist, confirmar que a tela mostra a mensagem de falta de permissão e **não**
+- [x] 3.4 Com um e-mail fora da allowlist, confirmar que a tela mostra a mensagem de falta de permissão e **não**
   "sua sessão expirou", e que nenhuma mensagem nova revela se o endereço está na lista
+  - **Feita — confirmada pela usuária.** Com um e-mail fora da allowlist, a tela mostrou a mensagem de
+    falta de permissão, e não "sua sessão expirou".
 
 ## 4. Registro do que quebrou sem teste
 
