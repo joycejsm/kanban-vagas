@@ -143,10 +143,11 @@ vagas.
 
 ### Requirement: Conteúdo do card
 
-Cada card SHALL exibir o título, a empresa, a senioridade e a data formatada de cadastro da vaga, e SHALL oferecer
+Cada card SHALL exibir o título, a empresa, a senioridade, a data formatada de cadastro da vaga e tags de
+requisitos extraídos (até 2 tags + contador excedente no desktop e contagem compacta no mobile), e SHALL oferecer
 um link para o anúncio de origem. O link SHALL usar a URL informada pelo usuário no cadastro, SHALL abrir em nova
 aba e SHALL ser acionado apenas por gesto explícito da pessoa usuária. O card SHALL NOT conter notas, campo de
-edição nem encontro com a tela de detalhe. Textos vindos de extração automática SHALL ser exibidos como texto
+edição nem link para uma página separada de detalhe. Textos vindos de extração automática SHALL ser exibidos como texto
 simples e nunca interpretados como marcação.
 
 #### Scenario: Card mostra os dados da vaga e o link de origem
@@ -156,6 +157,13 @@ simples e nunca interpretados como marcação.
 - **THEN** ele SHALL exibir o título, a empresa, a senioridade e a data formatada de cadastro, e o link SHALL apontar para
   `https://exemplo.com/vaga/7`, abrindo em nova aba
 
+#### Scenario: Card exibe tags de requisitos com limite visual
+
+- **GIVEN** uma vaga com múltiplos requisitos extraídos
+- **WHEN** o card é renderizado em desktop
+- **THEN** ele SHALL exibir até 2 tags de requisitos e um contador de excedentes (+N)
+- **AND** em telas mobile SHALL exibir a contagem compacta de requisitos
+
 #### Scenario: Conteúdo extraído é tratado como texto
 
 - **GIVEN** uma vaga cujo título, empresa ou requisito contenha tag HTML, aspas angulares ou script
@@ -163,12 +171,61 @@ simples e nunca interpretados como marcação.
 - **THEN** o texto SHALL aparecer literalmente na tela e nenhum elemento HTML correspondente ao conteúdo
   extraído SHALL ser interpretado
 
-#### Scenario: Card não abre tela de detalhe
+#### Scenario: Card não abre página separada de detalhe
 
 - **GIVEN** um quadro renderizado
 - **WHEN** o card de uma vaga é inspecionado
-- **THEN** ele SHALL NOT conter campo de notas, controle de edição nem link para uma tela de detalhe desta
+- **THEN** ele SHALL NOT conter campo de notas, controle de edição nem link (`<a>`) para uma página externa ou rota `/vaga/` desta
   vaga
+
+### Requirement: Navegação por abas em telas mobile
+
+Em viewports estreitos (`< md`), o quadro SHALL substituir o empilhamento vertical das cinco colunas por
+uma barra de abas no topo com contadores por etapa (`[Aplicado (N) | Entrevista 1 (N) | ...]`). O quadro SHALL
+exibir apenas a coluna correspondente à aba ativa no momento, reduzindo a rolagem vertical. Em telas maiores
+(`md:` e superiores), a navegação por abas SHALL permanecer oculta e o grid responsivo de 3 a 5 colunas SHALL
+ser exibido integralmente.
+
+#### Scenario: Visualização mobile exibe apenas a coluna ativa
+
+- **GIVEN** um viewport com largura inferior a 768px (`< md`)
+- **WHEN** o quadro é carregado
+- **THEN** uma barra de abas horizontal com os rótulos e contadores de cada status SHALL ser exibida no topo
+- **AND** apenas os cards da coluna correspondente à aba selecionada SHALL ser exibidos na tela
+
+#### Scenario: Alternância de abas troca a coluna visível
+
+- **GIVEN** a visualização mobile ativa com a aba "Aplicado" selecionada
+- **WHEN** o usuário toca na aba "Entrevista 1"
+- **THEN** a aba "Entrevista 1" SHALL ser destacada como ativa e a coluna correspondente SHALL ser exibida
+
+### Requirement: Painel de detalhes da vaga (Drawer)
+
+Ao clicar no corpo de um card de vaga (fora dos controles interativos como link de anúncio, seletor de coluna
+e botão de remoção), um painel de detalhes (Drawer) SHALL ser aberto. Em telas desktop/tablet, o painel SHALL
+deslizar lateralmente à direita; em telas mobile, o painel SHALL ocupar a parte inferior como bottom sheet de
+altura ampla. O Drawer SHALL exibir as informações completas da vaga, incluindo a lista numerada integral de
+todos os requisitos extraídos pela LLM. Interações com link, seletor e botão de remoção no card SHALL interromper
+a propagação do evento de clique (`stopPropagation`) para não disparar a abertura do Drawer acidentalmente.
+O Drawer SHALL poder ser fechado por botão explícito de fechar, pela tecla Escape ou pelo fechamento do diálogo.
+
+#### Scenario: Clique no card abre o painel de detalhes
+
+- **GIVEN** um card de vaga no quadro
+- **WHEN** a pessoa usuária clica no corpo do card
+- **THEN** o Drawer de detalhes SHALL ser exibido contendo título, empresa, senioridade, data, link completo e a lista de requisitos
+
+#### Scenario: Controles interativos não abrem o Drawer
+
+- **GIVEN** um card de vaga no quadro
+- **WHEN** a pessoa usuária clica no link do anúncio, altera a coluna pelo seletor ou clica no botão de remover
+- **THEN** a propagação do clique SHALL ser interrompida e o Drawer de detalhes SHALL NOT ser aberto
+
+#### Scenario: Fechamento do Drawer
+
+- **GIVEN** o Drawer de detalhes aberto
+- **WHEN** a pessoa usuária clica no botão fechar ou pressiona a tecla Escape
+- **THEN** o Drawer SHALL ser fechado retornando o foco ao quadro
 
 ### Requirement: Movimentação de card entre colunas
 

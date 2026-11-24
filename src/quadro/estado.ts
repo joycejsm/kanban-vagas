@@ -19,9 +19,10 @@ import { agruparPorColuna, COLUNAS, type Coluna } from '@/quadro/colunas';
  * que a verificação da 4.9 procura com `grep`. `url_normalizada` fica de fora pelo mesmo motivo
  * de hygiene — é um derivado do banco, e o card não desenha.
  *
- * `quantidadeDeRequisitos` é um número, não a lista: os requisitos são conteúdo extraído de
- * página alheia, e mostrar a lista inteira aqui seria abrir espaço para conteúdo que ninguém
- * revisou. A tela de detalhe, quando existir, é o lugar de mostrá-la.
+ * `requisitos` é a lista completa extraída pela LLM — conteúdo de página alheia que nunca
+ * é renderizado como HTML. O card exibe até 2 tags no desktop e a contagem no mobile;
+ * o Drawer de detalhes exibe a lista completa. `quantidadeDeRequisitos` é mantido como
+ * conveniência para funções puras que precisam apenas do total sem iterar o array.
  */
 export interface CartaoDeVaga {
   id: string;
@@ -33,6 +34,8 @@ export interface CartaoDeVaga {
   status: StatusVaga;
   ordem: number;
   created_at: string;
+  /** Lista completa dos requisitos extraídos. Exibida no Drawer de detalhes. */
+  requisitos: string[];
   quantidadeDeRequisitos: number;
 }
 
@@ -59,6 +62,7 @@ export function paraCartoes(vagas: readonly VagaRow[]): CartaoDeVaga[] {
     status: vaga.status,
     ordem: vaga.ordem,
     created_at: vaga.created_at,
+    requisitos: vaga.requisitos,
     quantidadeDeRequisitos: vaga.requisitos.length,
   }));
 }

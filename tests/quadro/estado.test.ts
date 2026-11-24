@@ -54,6 +54,7 @@ function cartao(overrides: Partial<CartaoDeVaga> = {}): CartaoDeVaga {
     status: 'aplicado',
     ordem: 0,
     created_at: '2026-01-01T00:00:00.000Z',
+    requisitos: ['TypeScript', 'Postgres'],
     quantidadeDeRequisitos: 2,
     ...overrides,
   };
@@ -70,6 +71,7 @@ describe('paraCartoes — o que atravessa para o navegador', () => {
       status: 'aplicado',
       ordem: 0,
       created_at: '2026-01-01T00:00:00.000Z',
+      requisitos: ['TypeScript', 'Postgres'],
       quantidadeDeRequisitos: 2,
     });
   });
@@ -94,11 +96,14 @@ describe('paraCartoes — o que atravessa para o navegador', () => {
     expect(paraCartoes([linha()])[0]?.url).toBe('https://empresa.com/vaga/7?utm_source=linkedin');
   });
 
-  it('conta os requisitos em vez de levar a lista', () => {
+  it('leva a lista de requisitos para o Drawer de detalhes', () => {
     const [projetado] = paraCartoes([linha({ requisitos: ['a', 'b', 'c'] })]);
 
     expect(projetado?.quantidadeDeRequisitos).toBe(3);
-    expect(Object.keys(projetado ?? {})).not.toContain('requisitos');
+    expect(projetado?.requisitos).toEqual(['a', 'b', 'c']);
+    // Campos proibidos continuam ausentes, independentemente de levar a lista
+    expect(Object.keys(projetado ?? {})).not.toContain('user_id');
+    expect(Object.keys(projetado ?? {})).not.toContain('url_normalizada');
   });
 
   it('devolve lista vazia para usuário sem vagas', () => {

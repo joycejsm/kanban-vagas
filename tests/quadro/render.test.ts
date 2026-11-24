@@ -75,6 +75,14 @@ describe('renderização — colunas (task 4.3)', () => {
     expect(html.match(/Nenhuma vaga\./g)).toHaveLength(5);
   });
 
+  it('renderiza abas de navegação mobile com contagens de cada etapa', () => {
+    const html = renderizar([linha({ status: 'aplicado' })]);
+
+    expect(html).toContain('aria-label="Etapas do processo"');
+    expect(html).toContain('Aplicado');
+    expect(html).toContain('(1)');
+  });
+
   it('mostra a contagem de cada coluna', () => {
     const html = renderizar([
       linha({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', status: 'aplicado' }),
@@ -102,6 +110,20 @@ describe('renderização — conteúdo do card (task 4.2)', () => {
     const html = renderizar([linha({ created_at: '2026-05-15T12:00:00.000Z' })]);
 
     expect(html).toContain('15 mai');
+  });
+
+  it('exibe tags de requisitos no card com limite e contagem', () => {
+    const html = renderizar([
+      linha({ requisitos: ['TypeScript', 'React', 'Node.js', 'PostgreSQL'] }),
+    ]);
+
+    // Exibe as duas primeiras tags no desktop
+    expect(html).toContain('TypeScript');
+    expect(html).toContain('React');
+    // Contador das excedentes no desktop
+    expect(html).toContain('+2');
+    // Contagem compacta no mobile
+    expect(html).toContain('4 requisitos');
   });
 
   it('liga para a URL que a pessoa colou, e não para a normalizada', () => {

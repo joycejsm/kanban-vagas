@@ -34,6 +34,7 @@ import {
   type CartaoDeVaga,
   type PosicaoAnterior,
 } from '@/quadro/estado';
+import { DrawerDetalhesVaga } from '@/quadro/DrawerDetalhesVaga';
 
 /**
  * O quadro: cinco colunas, cards, e o estado otimista do movimento.
@@ -65,7 +66,8 @@ export function Quadro({ cartoes: iniciais }: Props) {
   const [emRemocao, definirRemocao] = useState<string | null>(null);
   const [erro, definirErro] = useState<string | null>(null);
   const [cardAtivoId, definirCardAtivoId] = useState<string | null>(null);
-
+  const [abaAtiva, definirAbaAtiva] = useState<StatusVaga>('aplicado');
+  const [cardSelecionado, definirCardSelecionado] = useState<CartaoDeVaga | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -194,20 +196,49 @@ export function Quadro({ cartoes: iniciais }: Props) {
           </p>
         )}
 
+        {/* Abas mobile: visíveis apenas em < md */}
+        <nav className="flex overflow-x-auto md:hidden" aria-label="Etapas do processo">
+          {colunas.map((coluna) => (
+            <button
+              key={coluna.status}
+              type="button"
+              onClick={() => definirAbaAtiva(coluna.status)}
+              aria-pressed={abaAtiva === coluna.status}
+              className={[
+                'shrink-0 border-b-2 px-3 py-2 font-dados text-[11px] font-medium uppercase tracking-[0.12em] transition-colors whitespace-nowrap',
+                abaAtiva === coluna.status
+                  ? `border-ambar ${textoDaColuna(coluna.status)}`
+                  : 'border-traco text-tinta-fraca hover:text-tinta-media',
+              ].join(' ')}
+            >
+              {coluna.rotulo}
+              <span className="ml-1 tabular-nums">
+                ({coluna.vagas.length})
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Grid de colunas: no mobile exibe apenas a aba ativa; no md+ preserva os breakpoints md:grid-cols-3 xl:grid-cols-5 */}
         <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
           {colunas.map((coluna) => (
-            <Coluna
+            <div
               key={coluna.status}
-              status={coluna.status}
-              rotulo={coluna.rotulo}
-              cartoes={coluna.vagas}
-              ocupado={emTransicao}
-              vagaEmMovimento={emMovimento?.vagaId ?? null}
-              vagaEmRemocao={emRemocao}
-              cardArrastadoId={cardAtivoId}
-              aoMover={moverPara}
-              aoRemover={removerVagaDoQuadro}
-            />
+              className={coluna.status === abaAtiva ? 'block' : 'hidden md:block'}
+            >
+              <Coluna
+                status={coluna.status}
+                rotulo={coluna.rotulo}
+                cartoes={coluna.vagas}
+                ocupado={emTransicao}
+                vagaEmMovimento={emMovimento?.vagaId ?? null}
+                vagaEmRemocao={emRemocao}
+                cardArrastadoId={cardAtivoId}
+                aoMover={moverPara}
+                aoRemover={removerVagaDoQuadro}
+                aoAbrirDrawer={(cartao) => definirCardSelecionado(cartao)}
+              />
+            </div>
           ))}
         </div>
       </div>
@@ -220,10 +251,16 @@ export function Quadro({ cartoes: iniciais }: Props) {
             emRemocao={false}
             aoMover={() => {}}
             aoRemover={() => {}}
+            aoAbrirDrawer={() => {}}
             isDragOverlay
           />
         ) : null}
       </DragOverlay>
+
+      <DrawerDetalhesVaga
+        cartao={cardSelecionado}
+        aoFechar={() => definirCardSelecionado(null)}
+      />
     </DndContext>
   );
 }
@@ -241,6 +278,7 @@ function Coluna({
   cardArrastadoId,
   aoMover,
   aoRemover,
+  aoAbrirDrawer,
 }: {
   status: StatusVaga;
   rotulo: string;
@@ -251,6 +289,7 @@ function Coluna({
   cardArrastadoId: string | null;
   aoMover: (vagaId: string, destino: StatusVaga, novoIndice?: number) => void;
   aoRemover: (vagaId: string) => void;
+  aoAbrirDrawer: (cartao: CartaoDeVaga) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `coluna-${status}`,
@@ -298,6 +337,7 @@ function Coluna({
               estaSendoArrastado={cardArrastadoId === cartao.id}
               aoMover={aoMover}
               aoRemover={aoRemover}
+              aoAbrirDrawer={aoAbrirDrawer}
             />
           ))}
         </div>
@@ -314,6 +354,7 @@ function Cartao({
   estaSendoArrastado,
   aoMover,
   aoRemover,
+  aoAbrirDrawer,
   isDragOverlay,
 }: {
   cartao: CartaoDeVaga;
@@ -322,6 +363,7 @@ function Cartao({
   estaSendoArrastado?: boolean;
   aoMover: (vagaId: string, destino: StatusVaga, novoIndice?: number) => void;
   aoRemover: (vagaId: string) => void;
+  aoAbrirDrawer?: (cartao: CartaoDeVaga) => void;
   isDragOverlay?: boolean;
 }) {
   const {
@@ -350,7 +392,7 @@ function Cartao({
   const classesDoCard = [
     'flex flex-col gap-2 rounded-sm border border-traco bg-papel-alto p-3 transition-shadow',
     fileteDaColuna(cartao.status),
-    !isDragOverlay && 'cursor-grab active:cursor-grabbing touch-none',
+    !isDragOverlay && 'cursor-pointer active:cursor-grabbing touch-none',
     sendoArrastado ? 'opacity-30' : ocupado || emRemocao ? 'opacity-60' : null,
     isDragOverlay ? 'shadow-2xl ring-2 ring-ambar/70 rotate-1 cursor-grabbing' : null,
   ]
@@ -363,6 +405,11 @@ function Cartao({
       style={style}
       {...(isDragOverlay ? {} : attributes)}
       {...(isDragOverlay ? {} : listeners)}
+      onClick={() => {
+        if (!isDragOverlay && aoAbrirDrawer) {
+          aoAbrirDrawer(cartao);
+        }
+      }}
       className={classesDoCard}
     >
       <h3 className="font-titulo text-[15px] leading-snug text-tinta-clara">{cartao.titulo}</h3>
@@ -371,11 +418,37 @@ function Cartao({
         {cartao.empresa} <span className="text-tinta-fraca">·</span> {cartao.senioridade}
       </p>
 
+      {/* Tags de requisitos: no desktop até 2 tags + contador, no mobile contagem compacta */}
+      {cartao.requisitos.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="sm:hidden font-dados text-[10px] text-tinta-fraca">
+            {cartao.requisitos.length} {cartao.requisitos.length === 1 ? 'requisito' : 'requisitos'}
+          </span>
+          <div className="hidden sm:flex flex-wrap items-center gap-1">
+            {cartao.requisitos.slice(0, 2).map((req, idx) => (
+              <span
+                key={idx}
+                className="max-w-[140px] truncate rounded-sm border border-traco bg-papel-fundo px-1.5 py-0.5 font-dados text-[10px] text-tinta-media"
+                title={req}
+              >
+                {req}
+              </span>
+            ))}
+            {cartao.requisitos.length > 2 && (
+              <span className="font-dados text-[10px] text-tinta-fraca">
+                +{cartao.requisitos.length - 2}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <a
           href={cartao.url}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(evento) => evento.stopPropagation()}
           className="self-start font-dados text-[11px] text-ambar underline decoration-ambar/40 underline-offset-4 hover:decoration-ambar"
         >
           Ver anúncio →
@@ -400,6 +473,7 @@ function Cartao({
           id={`mover-${cartao.id}`}
           value=""
           disabled={ocupado || emRemocao || isDragOverlay}
+          onClick={(evento) => evento.stopPropagation()}
           onChange={(evento) => {
             const escolhido = evento.target.value;
             if (escolhido !== '') {
@@ -418,7 +492,10 @@ function Cartao({
 
         <button
           type="button"
-          onClick={() => aoRemover(cartao.id)}
+          onClick={(evento) => {
+            evento.stopPropagation();
+            aoRemover(cartao.id);
+          }}
           disabled={emRemocao || isDragOverlay}
           className="rounded-sm border border-traco px-2 py-1 font-dados text-[11px] text-tinta-fraca transition-colors hover:border-terra/50 hover:bg-terra-fundo hover:text-terra disabled:opacity-50"
         >
