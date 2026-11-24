@@ -356,3 +356,33 @@ Inofensivo, mas foi a agente.
    - Testes de banco pgTAP (`npm run test:db`): 2 arquivos, 51 testes passed.
    - Typecheck (`npm run typecheck`): limpo, zero erros.
    - Suite unificada `npm run verificar`: 100% PASS.
+
+---
+
+## 9. Sessão de 2026-11-23 — Conclusão de `fix-description-heading-separation`
+
+### O que foi feito e provado
+
+1. **Separação estrita de cabeçalhos no HTML (`extrairTexto` em `parsing.ts`):**
+   - Inserção de quebras bidirecionais (`.before('\n').after('\n')`) em elementos de cabeçalho (`h1` a `h6`).
+   - Impede que textos anteriores ou posteriores sem tag envolvente fiquem concatenados com títulos de seção (ex.: `"Descrição da vagaA Omie tem como propósito…"`).
+
+2. **Filtragem de títulos e rótulos de seção (`extrairListaDaDescricao`):**
+   - Criação de dicionário com termos estruturais normalizados ("descrição da vaga", "requisitos e qualificações", "sobre a empresa", "responsabilidades e atribuições", etc.).
+   - Descarte ativo dessas linhas, mesmo em textos com 8 ou menos linhas ou com marcadores de lista.
+
+3. **Segmentação da seção de requisitos (`isolarSecaoDeRequisitos`):**
+   - Identifica o cabeçalho demarcador de requisitos e isola o trecho até o próximo cabeçalho de outra seção (ex.: benefícios, etapas, informações adicionais).
+   - Quando a seção identificada possui 2 ou mais requisitos válidos, esses requisitos são retornados com prioridade, descartando parágrafos de apresentação institucional precedentes. Caso contrário, recorre à lista geral filtrada de cabeçalhos.
+
+4. **Fixture real da Omie testada (`parsing.test.ts`):**
+   - Teste automatizado com a estrutura completa da vaga da Omie na Gupy (~117 KB, JSON-LD escapado, texto de apresentação da empresa antes dos requisitos).
+   - Comprova que os 4 requisitos legítimos entram no array e nenhuma frase institucional ("Omie tem como propósito...") ou cabeçalho vaza para os cards.
+
+5. **Validação completa:**
+   - Testes Deno da função (`npm run test:funcao`): 44 passed (180 steps).
+   - Testes unitários do frontend (`npm test`): 18 arquivos, 292 testes passed.
+   - Testes de banco pgTAP (`npm run test:db`): 2 arquivos, 51 testes passed.
+   - Typecheck (`npm run typecheck`): limpo, zero erros.
+   - Suite unificada `npm run verificar`: 100% PASS.
+   - OpenSpec: 10/10 tasks concluídas, spec `ingest-vaga` atualizada e change arquivada em `openspec/changes/archive/2026-11-23-fix-description-heading-separation/`.

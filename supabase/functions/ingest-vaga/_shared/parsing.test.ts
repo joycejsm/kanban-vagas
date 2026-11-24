@@ -2,6 +2,7 @@ import { assertEquals } from 'jsr:@std/assert@1';
 import { describe, it } from 'jsr:@std/testing@1/bdd';
 
 import {
+  ehTituloDeSecao,
   extrairLdJson,
   extrairListaDaDescricao,
   extrairTexto,
@@ -89,6 +90,23 @@ describe('normalização de texto', () => {
 
     assertEquals(texto.includes('TypeScript'), true);
     assertEquals(texto.includes('Postgres'), true);
+  });
+
+  it('separa cabeçalhos h1-h6 do texto anterior e posterior sem concatenar', () => {
+    const htmlSemTagsEmVolta = 'Texto anterior<h2>Descrição da vaga</h2>Texto corrido seguinte';
+    const texto = extrairTexto(htmlSemTagsEmVolta);
+
+    assertEquals(texto, 'Texto anterior\nDescrição da vaga\nTexto corrido seguinte');
+    assertEquals(texto.includes('Descrição da vagaTexto'), false);
+    assertEquals(texto.includes('Texto anteriorDescrição'), false);
+
+    const htmlInicioComHeading = '<h2>Requisitos e qualificações</h2>- Experiência em Go';
+    const textoInicio = extrairTexto(htmlInicioComHeading);
+    assertEquals(textoInicio, 'Requisitos e qualificações\n- Experiência em Go');
+
+    const htmlHeadingsConsecutivos = '<h1>Empresa XPTO</h1><h2>Engenheiro(a) de Software</h2><p>Sobre a vaga</p>';
+    const textoHeadings = extrairTexto(htmlHeadingsConsecutivos);
+    assertEquals(textoHeadings, 'Empresa XPTO\nEngenheiro(a) de Software\nSobre a vaga');
   });
 });
 
@@ -271,6 +289,54 @@ describe('extração de requisitos da descrição', () => {
 
     assertEquals(extrairListaDaDescricao(descricao).length <= 30, true);
   });
+
+  it('descarta títulos de seções conhecidas mesmo quando o texto total tem 8 ou menos linhas', () => {
+    const textoComTitulos = [
+      'Descrição da vaga',
+      '- Experiência com TypeScript',
+      '- Conhecimento em Node.js',
+      'Requisitos e qualificações:',
+      '- Domínio de PostgreSQL',
+      'Informações adicionais',
+    ].join('\n');
+
+    const itens = extrairListaDaDescricao(textoComTitulos);
+
+    assertEquals(itens, ['Experiência com TypeScript', 'Conhecimento em Node.js', 'Domínio de PostgreSQL']);
+    assertEquals(itens.includes('Descrição da vaga'), false);
+    assertEquals(itens.includes('Requisitos e qualificações:'), false);
+    assertEquals(itens.includes('Informações adicionais'), false);
+  });
+
+  it('descarta títulos de seção com marcações Markdown e numeração', () => {
+    const texto = [
+      '## Sobre a empresa',
+      '1. Requisitos obrigatórios:',
+      '- Go',
+      '- Docker',
+      '### Benefícios:',
+    ].join('\n');
+
+    const itens = extrairListaDaDescricao(texto);
+    assertEquals(itens, ['Go', 'Docker']);
+  });
+});
+
+describe('ehTituloDeSecao', () => {
+  it('reconhece títulos de seção em diferentes formatos e pontuações', () => {
+    assertEquals(ehTituloDeSecao('Descrição da vaga'), true);
+    assertEquals(ehTituloDeSecao('Requisitos e qualificações:'), true);
+    assertEquals(ehTituloDeSecao('## Sobre a empresa'), true);
+    assertEquals(ehTituloDeSecao('1. Responsabilidades e atribuições'), true);
+    assertEquals(ehTituloDeSecao('Benefícios:'), true);
+    assertEquals(ehTituloDeSecao('Informações adicionais'), true);
+  });
+
+  it('não confunde requisitos normais com títulos de seção', () => {
+    assertEquals(ehTituloDeSecao('Requisitos mínimos: 3 anos de experiência com Go'), false);
+    assertEquals(ehTituloDeSecao('Atender aos requisitos de qualidade de código'), false);
+    assertEquals(ehTituloDeSecao('Experiência com TypeScript'), false);
+  });
 });
 
 describe('extrairLdJson — decodificação de entidades HTML (bloco escapado)', () => {
@@ -413,7 +479,55 @@ describe('extração estruturada de página real da Gupy / Stefanini (sem modelo
     assertEquals(vaga?.requisitos.includes('Experiência com TypeScript e React'), true);
     assertEquals(vaga?.requisitos.includes('Domínio de Node.js e APIs REST'), true);
     assertEquals(vaga?.requisitos.includes('Conhecimento em Docker e SQL'), true);
+    assertEquals(vaga?.requisitos.includes('Descrição da vaga'), false);
+    assertEquals(vaga?.requisitos.includes('Requisitos e qualificações'), false);
     // Confirma que nenhuma marcação HTML vazou para os itens
+    for (const req of vaga!.requisitos) {
+      assertEquals(/<[^>]+>/.test(req), false);
+    }
+  });
+});
+
+describe('extração estruturada de página real da Gupy / Omie (segmentação e texto institucional)', () => {
+  it('isola requisitos ignorando texto institucional precedente e cabeçalhos colados (fixture Omie)', () => {
+    // Simula a estrutura real da vaga da Omie na Gupy (~117 KB com ld+json escapado e texto institucional)
+    const paginaGupyOmie = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <title>Pessoa Desenvolvedora de Software - Omie</title>
+    <script type="application/ld+json">
+{&quot;@context&quot;:&quot;http://schema.org&quot;,&quot;@type&quot;:&quot;JobPosting&quot;,&quot;title&quot;:&quot;Pessoa Desenvolvedora de Software&quot;,&quot;hiringOrganization&quot;:{&quot;@type&quot;:&quot;Organization&quot;,&quot;name&quot;:&quot;Omie&quot;},&quot;description&quot;:&quot;&lt;h2&gt;Descrição da vaga&lt;/h2&gt;A Omie tem como propósito transformar o empreendedorismo no Brasil através de um ecossistema completo de gestão.&lt;p&gt;Nossa cultura é focada em inovação e autonomia para resolver problemas reais.&lt;/p&gt;&lt;h2&gt;Responsabilidades e atribuições&lt;/h2&gt;&lt;p&gt;Construir produtos digitais robustos e de alta performance.&lt;/p&gt;&lt;h2&gt;Requisitos e qualificações&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;- Experiência consolidada em TypeScript e Node.js&lt;/li&gt;&lt;li&gt;- Conhecimento aprofundado em PostgreSQL&lt;/li&gt;&lt;li&gt;- Vivência em desenvolvimento de APIs e mensageria&lt;/li&gt;&lt;li&gt;- Prática com testes automatizados e integração contínua&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Informações adicionais&lt;/h2&gt;&lt;p&gt;Modelo 100% remoto, assistência médica e auxílio educação.&lt;/p&gt;&quot;,&quot;experienceRequirements&quot;:&quot;Sênior&quot;}
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <h1>Pessoa Desenvolvedora de Software</h1>
+      <p>Omie</p>
+    </div>
+  </body>
+</html>`;
+
+    const vaga = extrairLdJson(paginaGupyOmie);
+
+    assertEquals(vaga !== null, true);
+    assertEquals(vaga?.titulo, 'Pessoa Desenvolvedora de Software');
+    assertEquals(vaga?.empresa, 'Omie');
+    assertEquals(vaga?.senioridade, 'Senior');
+
+    // Confirma que os requisitos reais foram extraídos
+    assertEquals(vaga?.requisitos.includes('Experiência consolidada em TypeScript e Node.js'), true);
+    assertEquals(vaga?.requisitos.includes('Conhecimento aprofundado em PostgreSQL'), true);
+    assertEquals(vaga?.requisitos.includes('Vivência em desenvolvimento de APIs e mensageria'), true);
+    assertEquals(vaga?.requisitos.includes('Prática com testes automatizados e integração contínua'), true);
+
+    // Confirma que textos institucionais e cabeçalhos NÃO entraram como requisitos
+    assertEquals(vaga?.requisitos.some((r) => r.includes('Omie tem como propósito')), false);
+    assertEquals(vaga?.requisitos.some((r) => r.includes('Descrição da vaga')), false);
+    assertEquals(vaga?.requisitos.some((r) => r.includes('Responsabilidades e atribuições')), false);
+    assertEquals(vaga?.requisitos.some((r) => r.includes('Informações adicionais')), false);
+    assertEquals(vaga?.requisitos.some((r) => r.includes('Modelo 100% remoto')), false);
+
+    // Garante que não há HTML residual
     for (const req of vaga!.requisitos) {
       assertEquals(/<[^>]+>/.test(req), false);
     }
