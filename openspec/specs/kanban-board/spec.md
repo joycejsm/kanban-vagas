@@ -207,7 +207,9 @@ deslizar lateralmente à direita; em telas mobile, o painel SHALL ocupar a parte
 altura ampla. O Drawer SHALL exibir as informações completas da vaga, incluindo a lista numerada integral de
 todos os requisitos extraídos pela LLM. Interações com link, seletor e botão de remoção no card SHALL interromper
 a propagação do evento de clique (`stopPropagation`) para não disparar a abertura do Drawer acidentalmente.
-O Drawer SHALL poder ser fechado por botão explícito de fechar, pela tecla Escape ou pelo fechamento do diálogo.
+O Drawer SHALL poder ser fechado por botão explícito de fechar, pela tecla Escape, pelo clique no backdrop externo
+ou pelo fechamento do diálogo. O painel e o backdrop SHALL executar transição fluida de slide e fade sem conflito
+de classes de translação, preservando o conteúdo visível durante a saída e restaurando a rolagem do quadro ao fechar.
 
 #### Scenario: Clique no card abre o painel de detalhes
 
@@ -224,8 +226,14 @@ O Drawer SHALL poder ser fechado por botão explícito de fechar, pela tecla Esc
 #### Scenario: Fechamento do Drawer
 
 - **GIVEN** o Drawer de detalhes aberto
-- **WHEN** a pessoa usuária clica no botão fechar ou pressiona a tecla Escape
-- **THEN** o Drawer SHALL ser fechado retornando o foco ao quadro
+- **WHEN** a pessoa usuária clica no botão fechar, pressiona a tecla Escape ou clica no backdrop externo
+- **THEN** o Drawer SHALL ser fechado com animação de saída, retornando o foco e restaurando a rolagem do quadro
+
+#### Scenario: Transição responsiva sem colisão de posicionamento
+
+- **GIVEN** o Drawer sendo aberto ou fechado
+- **WHEN** as classes de translação são aplicadas
+- **THEN** o painel SHALL deslizar a partir da borda inferior no mobile e da borda direita no desktop sem conflito de especificidade CSS e sem restrição indevida de altura máxima nativa do diálogo
 
 ### Requirement: Movimentação de card entre colunas
 
