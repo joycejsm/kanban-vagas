@@ -104,6 +104,9 @@ export function etapaAllowlist(
   usuario: UsuarioAutenticado,
   config: EnvConfig,
 ): ErroPipeline | null {
+  if (config.allowedEmails.includes('*')) {
+    return null;
+  }
   const email = usuario.email ? normalizarEmail(usuario.email) : '';
   return config.allowedEmails.includes(email) ? null : ERROS.naoAutorizado();
 }

@@ -208,3 +208,38 @@ Estado em 2026-11-23: Implementada e arquivada no OpenSpec.
    - `npm run test:db` (pgTAP): 51 passed (2 arquivos).
    - `npm run test:funcao` (Deno): 44 passed (180 steps).
    - `openspec validate --specs`: 14 passed, 0 failed.
+
+---
+
+## Modo Público / Portfólio (`allow-public-google-auth`)
+
+Estado em 2026-11-24: Implementada e arquivada no OpenSpec.
+
+### O que foi entregue
+
+1. **Acesso Público via Curinga `*` em `ALLOWED_EMAILS`:**
+   - `src/auth/allowlist.ts`: `emailAutorizado` aceita qualquer usuário autenticado com e-mail não vazio quando a allowlist contiver `'*'`.
+   - `supabase/functions/ingest-vaga/_shared/pipeline.ts`: `etapaAllowlist` aprova qualquer requisição autenticada quando `allowedEmails` contiver `'*'`.
+   - RLS no PostgreSQL (`auth.uid() = user_id`) e Rate Limit no Supabase (20/hora e 100/dia por usuário) continuam intactos e protegendo dados e cotas de LLM.
+
+2. **Verificação de Referência:**
+   - `npm run typecheck`: sem erros.
+   - `npm test` (vitest): **304 passed** (18 arquivos) — 3 novos cenários.
+   - `npm run test:db` (pgTAP): 51 passed.
+   - `npm run test:funcao` (Deno): **44 passed** (181 steps).
+   - `openspec validate --all`: 15 passed, 0 failed.
+
+### Passos de Configuração em Produção
+
+1. **Supabase Auth Hook:**
+   - Desativar ou deletar o hook `Before User Created` (`rejeitar_email_fora_da_allowlist`) no painel do Supabase (**Authentication -> Hooks**).
+2. **Secrets no Supabase (para a Edge Function):**
+   ```bash
+   supabase secrets set ALLOWED_EMAILS=*
+   ```
+   E realizar novo deploy da Edge Function:
+   ```bash
+   supabase functions deploy ingest-vaga
+   ```
+3. **Variáveis de Ambiente na Vercel (para o Next.js):**
+   - Atualizar `ALLOWED_EMAILS` para `*` nas configurações de Environment Variables do projeto na Vercel (Production & Preview) e disparar novo deploy (ou push no git).

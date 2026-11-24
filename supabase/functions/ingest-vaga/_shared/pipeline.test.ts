@@ -245,6 +245,13 @@ describe('etapaAllowlist', () => {
 
     assertEquals(etapaAllowlist(usuario, CONFIG), null);
   });
+
+  it('aceita qualquer e-mail quando allowedEmails contém o curinga *', () => {
+    const configPublica: EnvConfig = { ...CONFIG, allowedEmails: ['*'] };
+    const visitante: UsuarioAutenticado = { id: USUARIO.id, email: 'qualquer@visitante.com' };
+
+    assertEquals(etapaAllowlist(visitante, configPublica), null);
+  });
 });
 
 describe('etapaRateLimit', () => {

@@ -37,6 +37,10 @@ export function emailAutorizado(
     return false;
   }
 
+  if (lista.includes('*')) {
+    return true;
+  }
+
   return lista.some((autorizado) => normalizarEmail(autorizado) === alvo);
 }
 

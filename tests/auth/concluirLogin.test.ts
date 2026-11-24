@@ -145,6 +145,20 @@ describe('concluirLogin — allowlist', () => {
     expect(signOut).not.toHaveBeenCalled();
   });
 
+  it('conclui o acesso com sucesso para qualquer e-mail quando a allowlist contém *', async () => {
+    const { cliente, signOut } = clienteDeCallback({ user: { email: 'visitante@externo.com' } });
+
+    const resultado = await concluirLogin({
+      codigo: 'codigo-valido',
+      next: null,
+      cliente,
+      allowlist: ['*'],
+    });
+
+    expect(resultado).toEqual({ destino: '/', sessaoEncerrada: false });
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
   it('encerra a sessão de e-mail não autorizado e leva a nao_autorizado', async () => {
     const { cliente, signOut } = clienteDeCallback({ user: { email: 'malvado@exemplo.com' } });
 

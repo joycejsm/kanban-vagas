@@ -36,6 +36,16 @@ describe('emailAutorizado', () => {
     expect(emailAutorizado('ana@exemplo.com.evil.test', LISTA)).toBe(false);
     expect(emailAutorizado('xxana@exemplo.com', LISTA)).toBe(false);
   });
+
+  it('aceita qualquer e-mail quando a lista contém o curinga *', () => {
+    expect(emailAutorizado('qualquer@visitante.com', ['*'])).toBe(true);
+    expect(emailAutorizado('outro@dominio.org', ['ana@exemplo.com', '*'])).toBe(true);
+  });
+
+  it('recusa e-mail vazio mesmo quando a lista contém *', () => {
+    expect(emailAutorizado('', ['*'])).toBe(false);
+    expect(emailAutorizado(undefined, ['*'])).toBe(false);
+  });
 });
 
 describe('lerAllowlistDoServidor', () => {
