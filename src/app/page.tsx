@@ -1,3 +1,4 @@
+import { sair } from '@/app/login/actions';
 import { lerConfiguracaoSupabase } from '@/config/serverEnv';
 import { FormularioNovaVaga } from '@/quadro/FormularioNovaVaga';
 import { Quadro } from '@/quadro/Quadro';
@@ -50,9 +51,19 @@ export default async function PaginaInicial() {
           fora do `<h1>` de propósito — um total de vagas não é o assunto da página, e entra-lo
           no título o colocaria no primeiro plano da navegação por leitor de tela.
         */}
-        <p className="font-dados text-[11px] tabular-nums tracking-wide text-tinta-fraca">
-          {String(cartoes.length).padStart(2, '0')} vaga{cartoes.length === 1 ? '' : 's'}
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="font-dados text-[11px] tabular-nums tracking-wide text-tinta-fraca">
+            {String(cartoes.length).padStart(2, '0')} vaga{cartoes.length === 1 ? '' : 's'}
+          </p>
+          <form action={sair}>
+            <button
+              type="submit"
+              className="font-dados text-[11px] tracking-wide text-tinta-fraca underline decoration-traco underline-offset-4 transition-colors hover:text-ambar hover:decoration-ambar"
+            >
+              sair
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="flex flex-col gap-6">

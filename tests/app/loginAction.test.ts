@@ -28,7 +28,7 @@ vi.mock('next/headers', () => ({
   headers: async () => new Headers(mocks.cabecalhos as unknown as Record<string, string>),
 }));
 
-const { entrarComGoogle } = await import('@/app/login/actions');
+const { entrarComGoogle, sair } = await import('@/app/login/actions');
 
 /** Executa a action e devolve o destino para onde ela redirecionou. */
 async function destinoDoRedirect(acao: () => Promise<void>): Promise<string> {
@@ -49,7 +49,8 @@ function clienteFalso(resultado: { url?: string; error?: unknown }) {
     data: resultado.url === undefined ? null : { url: resultado.url },
     error: resultado.error ?? null,
   }));
-  return { cliente: { auth: { signInWithOAuth } } as never, signInWithOAuth };
+  const signOut = vi.fn(async () => ({ error: null }));
+  return { cliente: { auth: { signInWithOAuth, signOut } } as never, signInWithOAuth, signOut };
 }
 
 beforeEach(() => {
@@ -130,5 +131,17 @@ describe('entrarComGoogle', () => {
 
     expect(destino).toBe('/login?erro=auth');
     expect(mocks.redirect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sair', () => {
+  it('chama signOut e redireciona para a rota de login', async () => {
+    const { cliente, signOut } = clienteFalso({});
+    mocks.criarClienteServidor.mockResolvedValue(cliente);
+
+    const destino = await destinoDoRedirect(() => sair());
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(destino).toBe('/login');
   });
 });

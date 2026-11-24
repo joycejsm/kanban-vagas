@@ -42,3 +42,12 @@ export async function entrarComGoogle(destinoPedido?: string | null): Promise<vo
 
   redirect(urlDeRetorno);
 }
+
+/**
+ * Encerra a sessão do usuário no Supabase e redireciona para a tela de login.
+ */
+export async function sair(): Promise<void> {
+  const cliente = await criarClienteServidor();
+  await cliente.auth.signOut();
+  redirect('/login');
+}

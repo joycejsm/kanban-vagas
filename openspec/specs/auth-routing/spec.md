@@ -93,3 +93,15 @@ middleware não seja executado para esses recursos.
 - **GIVEN** uma requisição para um arquivo estático em `_next/static` ou para o favicon
 - **WHEN** o matcher é avaliado
 - **THEN** o middleware SHALL NOT ser executado para essa requisição
+
+### Requirement: Encerramento de sessão (Logout)
+
+A aplicação SHALL permitir que o usuário autenticado encerre sua sessão ativa por meio da Server Action
+`sair`. A action SHALL invocar o encerramento de sessão no Supabase via `signOut`, limpar os cookies e
+redirecionar para `/login`.
+
+#### Scenario: Usuário encerra a sessão com sucesso
+
+- **GIVEN** um usuário com sessão autenticada ativa
+- **WHEN** a action `sair` é acionada
+- **THEN** o Supabase `signOut` SHALL ser chamado e a requisição SHALL ser redirecionada para `/login`
