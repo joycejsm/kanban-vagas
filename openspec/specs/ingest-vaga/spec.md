@@ -49,9 +49,17 @@ aceitar `user_id`, `status`, `ordem` ou qualquer outro campo de servidor.
 
 ### Requirement: CORS restrito à origem da aplicação
 
-A função SHALL aceitar apenas requisições cuja origem esteja em `APP_ORIGIN` e SHALL responder a preflight
-`OPTIONS` com os cabeçalhos CORS correspondentes. Requisições de origem diferente SHALL ser recusadas sem
-executar o pipeline.
+A função SHALL aceitar requisições cujo cabeçalho `Origin`, quando presente, seja exatamente igual a
+`APP_ORIGIN`, e SHALL responder a preflight `OPTIONS` com os cabeçalhos CORS correspondentes. Requisições com
+origem presente e diferente de `APP_ORIGIN` SHALL ser recusadas sem executar o pipeline. Requisição **sem**
+cabeçalho `Origin` SHALL ser tratada como chamada de cliente não-navegador e aceita, por não haver origem a
+conferir: nenhum navegador deixa de enviar `Origin` em requisição cross-origin, de modo que a ausência do
+cabeçalho não pode ser produzida por uma página alheia, e a conferência estrita continua valendo exatamente
+para o caminho do navegador, que é o que ela protege.
+
+O requisito de autenticação permanece independente desta etapa: uma requisição sem `Origin` aceita pela
+origem SHALL ainda ser recusada com `401` se não tiver sessão válida, e com `403` se o e-mail não estiver na
+allowlist.
 
 #### Scenario: Preflight da origem da aplicação é atendido
 
@@ -64,6 +72,25 @@ executar o pipeline.
 - **GIVEN** uma requisição com `Origin` fora de `APP_ORIGIN`
 - **WHEN** a função é invocada
 - **THEN** a função SHALL recusar a chamada sem executar extração nem gravar dados
+
+#### Scenario: Requisição sem Origin é aceita como cliente não-navegador
+
+- **GIVEN** uma requisição `POST` sem cabeçalho `Origin`, com token de sessão válido e e-mail na allowlist
+- **WHEN** a função é invocada
+- **THEN** a conferência de origem SHALL passar e o pipeline SHALL prosseguir até a extração
+
+#### Scenario: Ausência de Origin não dispensa autenticação
+
+- **GIVEN** uma requisição `POST` sem cabeçalho `Origin` e sem token de sessão válido
+- **WHEN** a função é invocada
+- **THEN** a resposta SHALL ser `401` e nenhuma extração SHALL ser executada
+
+#### Scenario: Navegador com origem errada continua barrado
+
+- **GIVEN** uma requisição `POST` originada de um navegador em domínio distinto de `APP_ORIGIN`, com token
+  válido
+- **WHEN** a função é invocada
+- **THEN** a resposta SHALL ser `403` de origem não permitida, sem executar extração nem gravar dados
 
 ### Requirement: Autenticação e allowlist de e-mail
 
@@ -93,8 +120,13 @@ do corpo ou da query string.
 ### Requirement: Limite de uso por usuário
 
 O sistema SHALL aplicar no máximo 20 ingestões por hora e 100 por dia, por usuário. Cada tentativa aceita
-deverá ser registrada em uma tabela de auditoria protegida por RLS. Ao exceder o limite, a função SHALL
-responder `429` antes de qualquer requisição de rede.
+deverá ser registrada em uma tabela de auditoria protegida por RLS, **antes** de qualquer trabalho caro, e a
+contagem da janela SHALL incluir o próprio registro corrente. Ao exceder o limite, a função SHALL responder
+`429` antes de qualquer requisição de rede.
+
+Toda tentativa registrada SHALL terminar com o desfecho gravado. Isso inclui a falha no caminho da própria
+auditoria: se a contagem da janela falhar **depois** do registro, a linha existente SHALL ser fechada como
+`erro` antes de a resposta ser enviada, e a etapa da falha SHALL constar no log.
 
 #### Scenario: Ingestão dentro do limite é aceita
 
@@ -119,6 +151,19 @@ responder `429` antes de qualquer requisição de rede.
 - **GIVEN** dois usuários autenticados com registros de auditoria
 - **QUANDO** um deles consulta a tabela de auditoria
 - **ENTÃO** o resultado SHALL conter apenas os próprios registros, e o cliente anônimo não SHALL obter acesso
+
+#### Scenario: Nenhuma tentativa fica com o desfecho pendente
+
+- **GIVEN** uma tentativa registrada cuja contagem de janela falha
+- **WHEN** a função responde
+- **THEN** o registro da tentativa SHALL estar com resultado diferente de `pendente`, e o log SHALL nomear a
+  etapa da auditoria
+
+#### Scenario: Falha no registro não tenta fechar linha que não existe
+
+- **GIVEN** uma falha ao registrar a tentativa
+- **WHEN** a função responde
+- **THEN** nenhuma gravação de desfecho SHALL ser tentada e a resposta SHALL ser genérica, sem detalhe do banco
 
 ### Requirement: Resposta de sucesso e de erro
 
@@ -153,3 +198,61 @@ função SHALL responder com `{"code": ..., "message": ...}`, onde `message` é 
 - **WHEN** a extração é validada
 - **THEN** a resposta SHALL ser `422`, sem repassar ao cliente a saída bruta do modelo, e o cliente SHALL ser
   convidado a colar o texto da vaga
+
+### Requirement: A extração estruturada tolera o JSON-LD escapado e trata o description como HTML
+
+A função SHALL tentar extrair a vaga do `ld+json` **antes** de recorrer ao modelo, e essa extração
+SHALL tolerar as duas formas que a medição encontrou em páginas reais.
+
+O conteúdo de um `script[type="application/ld+json"]` SHALL ser lido com as entidades HTML decodificadas
+quando o texto não for JSON válido como veio — dentro de `<script>` as entidades não são resolvidas, de
+modo que um bloco servido como `{&quot;@context&quot;…}` é recusado pelo `JSON.parse` e leva a função a
+descartar dado estruturado que estava presente e íntegro na página. A decodificação SHALL ser tentada
+**após** a falha do parse do texto como veio, de modo que bloco já válido siga o mesmo caminho de antes.
+
+O campo `description` de um `JobPosting` SHALL ser tratado como o HTML que é por definição, e
+convertido em texto antes de virar lista de requisitos. Enviá-lo cru ao reconhecedor de listas produz
+itens que contêm marcação, e como a lista é limitada em cardinalidade, a lista de marcação esgota o
+limite e oculta os requisitos reais.
+
+Quando a extração estruturada produzir título, empresa e ao menos um requisito, a função SHALL NOT
+chamar o modelo.
+
+#### Scenario: Bloco escapado como HTML é lido
+
+- **GIVEN** uma página cujo `ld+json` começa com `{&quot;@context&quot;:&quot;http://schema.org&quot;…}` e
+  contém um `JobPosting` íntegro
+- **WHEN** a função extrai a vaga estruturada
+- **THEN** ela SHALL devolver título, empresa e requisitos, e SHALL NOT recorrer ao modelo
+
+#### Scenario: Bloco já válido não muda de caminho
+
+- **GIVEN** a mesma vaga servida com o `ld+json` como JSON válido, sem escape
+- **WHEN** a função extrai a vaga estruturada
+- **THEN** o resultado SHALL ser idêntico ao do bloco escapado, e o parse SHALL ter sido tentado no
+  texto como veio antes de qualquer decodificação
+
+#### Scenario: description com marcação não vaza marcação para os requisitos
+
+- **GIVEN** um `JobPosting` cujo `description` é HTML, começando por `<h2>Descrição da vaga</h2><p>…`
+- **WHEN** a função extrai os requisitos
+- **THEN** nenhum requisito SHALL conter `<h2>`, `<p>`, `<span>` ou `</li>`, e a lista SHALL ter menos
+  itens que o número de marcas da página
+
+#### Scenario: O mesmo texto, com e sem marcação, dá a mesma lista
+
+- **GIVEN** um `JobPosting` cujo `description` em HTML, e o mesmo conteúdo com a marcação removida
+- **WHEN** a função extrai os requisitos dos dois
+- **THEN** as duas listas SHALL ser iguais, porque o reconhecedor recebe texto nos dois casos
+
+#### Scenario: Página sem dado estruturado ainda recorre ao modelo
+
+- **GIVEN** uma página sem `JobPosting` utilizável, ou com `description` ausente
+- **WHEN** a função extrai a vaga
+- **THEN** ela SHALL recorrer ao modelo, e a resposta ao usuário SHALL NOT revelar a saída do modelo
+
+#### Scenario: JSON-LD realmente malformado é ignorado em silêncio
+
+- **GIVEN** uma página cujo bloco `ld+json` não é JSON válido nem depois de decodificado
+- **WHEN** a função extrai a vaga estruturada
+- **THEN** ela SHALL devolver ausência de dado estruturado, sem lançar, e o pipeline SHALL prosseguir
