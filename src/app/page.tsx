@@ -1,5 +1,6 @@
 import { sair } from '@/app/login/actions';
 import { lerConfiguracaoSupabase } from '@/config/serverEnv';
+import { criarClienteServidor } from '@/lib/supabase/server';
 import { FormularioNovaVaga } from '@/quadro/FormularioNovaVaga';
 import { Quadro } from '@/quadro/Quadro';
 import { carregarQuadro, ehEstadoVazio } from '@/quadro/carregarQuadro';
@@ -23,6 +24,15 @@ export const dynamic = 'force-dynamic';
 
 export default async function PaginaInicial() {
   lerConfiguracaoSupabase();
+
+  let emailUsuario: string | null = null;
+  try {
+    const cliente = await criarClienteServidor();
+    const { data } = await cliente.auth.getUser();
+    emailUsuario = data.user?.email ?? null;
+  } catch {
+    emailUsuario = null;
+  }
 
   const resultado = await carregarQuadro();
   // A projeção acontece no servidor, antes da fronteira: um Client Component recebe os dados pelo
@@ -51,10 +61,26 @@ export default async function PaginaInicial() {
           fora do `<h1>` de propósito — um total de vagas não é o assunto da página, e entra-lo
           no título o colocaria no primeiro plano da navegação por leitor de tela.
         */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {emailUsuario !== null && (
+            <>
+              <span
+                title={emailUsuario}
+                className="max-w-[200px] truncate font-dados text-[11px] text-tinta-fraca sm:max-w-none"
+              >
+                {emailUsuario}
+              </span>
+              <span className="font-dados text-[11px] text-tinta-fraca" aria-hidden="true">
+                ·
+              </span>
+            </>
+          )}
           <p className="font-dados text-[11px] tabular-nums tracking-wide text-tinta-fraca">
             {String(cartoes.length).padStart(2, '0')} vaga{cartoes.length === 1 ? '' : 's'}
           </p>
+          <span className="font-dados text-[11px] text-tinta-fraca" aria-hidden="true">
+            ·
+          </span>
           <form action={sair}>
             <button
               type="submit"

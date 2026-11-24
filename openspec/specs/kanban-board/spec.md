@@ -143,17 +143,17 @@ vagas.
 
 ### Requirement: Conteúdo do card
 
-Cada card SHALL exibir o título, a empresa e a senioridade da vaga, e SHALL oferecer um link para o anúncio
-de origem. O link SHALL usar a URL informada pelo usuário no cadastro, SHALL abrir em nova aba e SHALL ser
-acionado apenas por gesto explícito da pessoa usuária. O card SHALL NOT conter notas, campo de edição nem
-encontro com a tela de detalhe. Textos vindos de extração automática SHALL ser exibidos como texto simples e
-nunca interpretados como marcação.
+Cada card SHALL exibir o título, a empresa, a senioridade e a data formatada de cadastro da vaga, e SHALL oferecer
+um link para o anúncio de origem. O link SHALL usar a URL informada pelo usuário no cadastro, SHALL abrir em nova
+aba e SHALL ser acionado apenas por gesto explícito da pessoa usuária. O card SHALL NOT conter notas, campo de
+edição nem encontro com a tela de detalhe. Textos vindos de extração automática SHALL ser exibidos como texto
+simples e nunca interpretados como marcação.
 
 #### Scenario: Card mostra os dados da vaga e o link de origem
 
 - **GIVEN** uma vaga cadastrada pela URL `https://exemplo.com/vaga/7`
 - **WHEN** o card dessa vaga é renderizado
-- **THEN** ele SHALL exibir o título, a empresa e a senioridade da vaga, e o link SHALL apontar para
+- **THEN** ele SHALL exibir o título, a empresa, a senioridade e a data formatada de cadastro, e o link SHALL apontar para
   `https://exemplo.com/vaga/7`, abrindo em nova aba
 
 #### Scenario: Conteúdo extraído é tratado como texto

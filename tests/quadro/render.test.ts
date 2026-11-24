@@ -98,6 +98,12 @@ describe('renderização — conteúdo do card (task 4.2)', () => {
     expect(html).toContain('Senior');
   });
 
+  it('exibe a data de candidatura formatada', () => {
+    const html = renderizar([linha({ created_at: '2026-05-15T12:00:00.000Z' })]);
+
+    expect(html).toContain('15 mai');
+  });
+
   it('liga para a URL que a pessoa colou, e não para a normalizada', () => {
     const html = renderizar([linha()]);
 

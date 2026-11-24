@@ -90,3 +90,43 @@ export function fileteDaColuna(status: StatusVaga): string {
 export function acentoDaColuna(status: StatusVaga): AcentoDeColuna {
   return ACENTO[status];
 }
+
+const MESES = [
+  'jan',
+  'fev',
+  'mar',
+  'abr',
+  'mai',
+  'jun',
+  'jul',
+  'ago',
+  'set',
+  'out',
+  'nov',
+  'dez',
+] as const;
+
+/**
+ * Formata a data ISO de cadastro da vaga para exibição no card (ex.: "24 nov").
+ *
+ * Usa UTC para garantir equivalência estrita entre o HTML de SSR e a hidratação no cliente,
+ * evitando qualquer divergência de fuso horário (hydration mismatch).
+ */
+export function formatarDataCandidatura(dataIso: string): string {
+  if (!dataIso) {
+    return '';
+  }
+
+  const data = new Date(dataIso);
+  if (Number.isNaN(data.getTime())) {
+    return '';
+  }
+
+  const dia = String(data.getUTCDate()).padStart(2, '0');
+  const mes = MESES[data.getUTCMonth()];
+  if (!mes) {
+    return '';
+  }
+
+  return `${dia} ${mes}`;
+}

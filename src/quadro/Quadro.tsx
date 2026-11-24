@@ -21,7 +21,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { atualizarStatus, removerVaga } from '@/app/actions/vagas';
 import { type StatusVaga } from '@/domain/vaga';
 import { destinosPossiveis, rotuloDoStatus } from '@/quadro/colunas';
-import { fileteDaColuna, fundoDaColuna, textoDaColuna } from '@/quadro/aparencia';
+import { fileteDaColuna, formatarDataCandidatura, fundoDaColuna, textoDaColuna } from '@/quadro/aparencia';
 import {
   assinaturaDoQuadro,
   colunasDoQuadro,
@@ -371,14 +371,26 @@ function Cartao({
         {cartao.empresa} <span className="text-tinta-fraca">·</span> {cartao.senioridade}
       </p>
 
-      <a
-        href={cartao.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="self-start font-dados text-[11px] text-ambar underline decoration-ambar/40 underline-offset-4 hover:decoration-ambar"
-      >
-        Ver anúncio →
-      </a>
+      <div className="flex items-center justify-between gap-2">
+        <a
+          href={cartao.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="self-start font-dados text-[11px] text-ambar underline decoration-ambar/40 underline-offset-4 hover:decoration-ambar"
+        >
+          Ver anúncio →
+        </a>
+
+        {formatarDataCandidatura(cartao.created_at) !== '' && (
+          <time
+            dateTime={cartao.created_at}
+            title={`Cadastrada em ${cartao.created_at.slice(0, 10)}`}
+            className="font-dados text-[10px] tabular-nums text-tinta-fraca"
+          >
+            {formatarDataCandidatura(cartao.created_at)}
+          </time>
+        )}
+      </div>
 
       <div className="mt-1 flex items-center gap-2">
         <label htmlFor={`mover-${cartao.id}`} className="sr-only">
