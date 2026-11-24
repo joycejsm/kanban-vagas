@@ -1,5 +1,5 @@
 import { type Senioridade, type StatusVaga, type VagaRow } from '@/domain/vaga';
-import { agruparPorColuna, type Coluna } from '@/quadro/colunas';
+import { agruparPorColuna, COLUNAS, type Coluna } from '@/quadro/colunas';
 
 /**
  * Estado do quadro no cliente, e a projeção que decide o que dele atravessa para o navegador.
@@ -97,21 +97,28 @@ export function colunasDoQuadro(cartoes: readonly CartaoDeVaga[]): Coluna<Cartao
 }
 
 /**
- * Move o card para outra coluna, com a posição de destino já calculada.
+ * Move o card para outra coluna ou para uma nova posição na mesma coluna.
  *
- * Devolve a lista inteira de cards, e não as colunas, porque quem chama é o Client Component e
- * ele guarda uma lista: agrupar e desagrupar a cada trans custaria um `flatMap` e um `map` a
- * cada movimento, e o ganho é zero.
+ * Quando `novoIndice` é informado, insere o card exatamente nessa posição e
+ * renumera os cards da coluna de destino (0, 1, 2...), garantindo ordenação
+ * determinística em drag-and-drop.
  *
- * Um `vagaId` que não existe devolve a mesma lista, sem exceção: um card que sumiu do quadro não
- * pode derrubar a interface inteira, e a reversão de um movimento usa esta mesma função.
+ * Quando `novoIndice` é omitido, preserva o comportamento da Fase 4: atribui a
+ * `ordem` informada diretamente ao card movido.
+ *
+ * Um `vagaId` que não existe devolve a mesma lista, sem exceção.
  */
 export function moverCard(
   cartoes: readonly CartaoDeVaga[],
   vagaId: string,
   destino: StatusVaga,
   ordem: number,
+  novoIndice?: number,
 ): CartaoDeVaga[] {
+  if (novoIndice !== undefined) {
+    return reordenarCards(cartoes, vagaId, destino, novoIndice);
+  }
+
   const atual = cartoes.find((cartao) => cartao.id === vagaId);
   if (atual === undefined) {
     return [...cartoes];
@@ -123,6 +130,44 @@ export function moverCard(
     ...cartoes.filter((cartao) => cartao.id !== vagaId),
     movido,
   ]);
+}
+
+/**
+ * Reordena cards inserindo o card indicado na posição `novoIndice` da coluna de destino,
+ * recalculando as ordens relativas da coluna de destino de forma contígua.
+ */
+export function reordenarCards(
+  cartoes: readonly CartaoDeVaga[],
+  vagaId: string,
+  destino: StatusVaga,
+  novoIndice: number,
+): CartaoDeVaga[] {
+  const atual = cartoes.find((cartao) => cartao.id === vagaId);
+  if (atual === undefined) {
+    return [...cartoes];
+  }
+
+  // Cards da coluna de destino, exceto o que está sendo movido, já na ordem correta
+  const outrosDestino = normalizar(
+    cartoes.filter((cartao) => cartao.id !== vagaId && cartao.status === destino),
+  );
+
+  // Limita o novo índice entre 0 e o total de cards restantes na coluna
+  const indiceClamped = Math.max(0, Math.min(novoIndice, outrosDestino.length));
+
+  const cardMovido: CartaoDeVaga = { ...atual, status: destino };
+
+  const colunaReordenada = [
+    ...outrosDestino.slice(0, indiceClamped),
+    cardMovido,
+    ...outrosDestino.slice(indiceClamped),
+  ].map((cartao, idx) => ({ ...cartao, ordem: idx }));
+
+  const outrasColunas = cartoes.filter(
+    (cartao) => cartao.id !== vagaId && cartao.status !== destino,
+  );
+
+  return normalizar([...outrasColunas, ...colunaReordenada]);
 }
 
 /**
@@ -183,4 +228,59 @@ export function assinaturaDoQuadro(cartoes: readonly CartaoDeVaga[]): string {
     .map((cartao) => `${cartao.id}:${cartao.status}:${cartao.ordem}`)
     .sort()
     .join('|');
+}
+
+/**
+ * Determina o status de destino e o índice na coluna a partir do elemento alvo do arraste (over).
+ *
+ * Suporta soltar diretamente sobre a coluna (identificada por `coluna-{status}` ou `{status}`)
+ * ou sobre outro card da coluna (assumindo o status e o índice daquele card).
+ * Retorna `null` se o drop for inválido, sobre si mesmo ou em posição inalterada.
+ */
+export function resolverDestinoArraste(
+  cartoes: readonly CartaoDeVaga[],
+  vagaId: string,
+  sobreId: string,
+): { destino: StatusVaga; novoIndice: number } | null {
+  if (vagaId === sobreId) {
+    return null;
+  }
+
+  const cardArrastado = cartoes.find((c) => c.id === vagaId);
+  if (!cardArrastado) {
+    return null;
+  }
+
+  // Caso 1: Solto diretamente sobre o container da coluna
+  const statusDireto = (sobreId.startsWith('coluna-') ? sobreId.replace('coluna-', '') : sobreId) as StatusVaga;
+  const colunaValida = COLUNAS.some((c) => c.status === statusDireto);
+  if (colunaValida) {
+    if (cardArrastado.status === statusDireto) {
+      return null;
+    }
+    const totalNaColuna = cartoes.filter((c) => c.status === statusDireto && c.id !== vagaId).length;
+    return { destino: statusDireto, novoIndice: totalNaColuna };
+  }
+
+  // Caso 2: Solto sobre outro card da lista
+  const sobreCard = cartoes.find((c) => c.id === sobreId);
+  if (!sobreCard) {
+    return null;
+  }
+
+  const cardsDestino = cartoes
+    .filter((c) => c.status === sobreCard.status && c.id !== vagaId)
+    .sort((a, b) => a.ordem - b.ordem);
+
+  const indiceAlvo = cardsDestino.findIndex((c) => c.id === sobreId);
+  const novoIndice = indiceAlvo >= 0 ? indiceAlvo : cardsDestino.length;
+
+  if (cardArrastado.status === sobreCard.status && cardArrastado.ordem === novoIndice) {
+    return null;
+  }
+
+  return {
+    destino: sobreCard.status,
+    novoIndice,
+  };
 }

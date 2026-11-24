@@ -177,3 +177,34 @@ Specs descrevem comportamento observável e são a fonte única de verdade; cód
 bug de spec **ou** de código, e a divergência se resolve escrevendo — nunca ajustando o teste para
 caber. A 9.4 da fase 2 falhou na primeira execução porque a asserção estava errada (o Supabase
 propaga o erro cru, não um `Error`), e a correção foi no teste.
+
+---
+
+## Fase 5 — Drag and Drop (`add-kanban-drag-and-drop`)
+
+Estado em 2026-11-23: Implementada e arquivada no OpenSpec.
+
+### O que foi entregue
+
+1. **Interação por Drag and Drop com `@dnd-kit`:**
+   - Adicionadas dependências `@dnd-kit/core`, `@dnd-kit/sortable` e `@dnd-kit/utilities` ao `package.json`.
+   - `DndContext` envolve a grade de colunas no `Quadro.tsx`, com `PointerSensor` configurado com `activationConstraint.distance: 8` (evita conflito de cliques em links ou botões com início de arraste).
+   - Cada `Coluna` é droppable (`useDroppable`) e sortable container (`SortableContext` com `verticalListSortingStrategy`).
+   - Cada `Cartao` é arrastável (`useSortable`), exibindo opacidade reduzida ao ser arrastado.
+   - `DragOverlay` flutuante estilizado com sombra e elevação destacada durante o movimento.
+
+2. **Acessibilidade e Compatibilidade Preservadas:**
+   - O controle `<select>` de movimentação manual permanece presente e funcional em cada card.
+   - Renderização estática no servidor (`renderToStaticMarkup`) preservada sem erros de SSR (todos os 18 testes de render passam).
+
+3. **Lógica de Estado Pura (`estado.ts`):**
+   - Função `reordenarCards` calcula o novo índice e renumera a coluna de forma contígua e determinística.
+   - Função `resolverDestinoArraste` mapeia com segurança drops sobre containers de coluna ou sobre outros cards.
+   - Suíte `tests/quadro/estado.test.ts` expandida com novos cenários de reordenação e drop.
+
+4. **Verificação de Referência:**
+   - `npm run typecheck`: sem erros.
+   - `npm test` (vitest): 301 passed (18 arquivos).
+   - `npm run test:db` (pgTAP): 51 passed (2 arquivos).
+   - `npm run test:funcao` (Deno): 44 passed (180 steps).
+   - `openspec validate --specs`: 14 passed, 0 failed.

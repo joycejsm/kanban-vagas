@@ -217,4 +217,15 @@ describe('renderização — conteúdo sem JavaScript', () => {
     expect(html).toContain('Dev Backend');
     expect(html).toContain('Fase técnica');
   });
+
+  it('renderiza os cards e as colunas com atributos semânticos preservando o seletor acessível', () => {
+    const html = renderizar([linha({ id: 'card-1', titulo: 'Engenheira de Software' })]);
+
+    // O seletor manual acessível continua presente
+    expect(html).toContain('for="mover-card-1"');
+    expect(html).toContain('Mover para…');
+    // As colunas possuem os identificadores acessíveis
+    expect(html).toContain('id="coluna-aplicado"');
+    expect(html).toContain('aria-labelledby="coluna-aplicado"');
+  });
 });

@@ -9,6 +9,8 @@ import {
   paraCartoes,
   posicaoDe,
   removerCard,
+  reordenarCards,
+  resolverDestinoArraste,
   reverterMovimento,
   type CartaoDeVaga,
 } from '@/quadro/estado';
@@ -184,6 +186,52 @@ describe('moverCard', () => {
 
     expect(cartoes[0]?.status).toBe('aplicado');
   });
+
+  it('reordena cards na mesma coluna quando novoIndice é informado', () => {
+    const cartoes = [
+      cartao({ id: 'a', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'b', status: 'aplicado', ordem: 1 }),
+      cartao({ id: 'c', status: 'aplicado', ordem: 2 }),
+    ];
+
+    // Move 'c' (último) para a primeira posição (índice 0)
+    const depois = moverCard(cartoes, 'c', 'aplicado', 0, 0);
+    const vagasAplicado = colunasDoQuadro(depois).find((col) => col.status === 'aplicado')?.vagas ?? [];
+
+    expect(vagasAplicado.map((v) => v.id)).toEqual(['c', 'a', 'b']);
+    expect(vagasAplicado.map((v) => v.ordem)).toEqual([0, 1, 2]);
+  });
+
+  it('move card para índice específico em outra coluna quando novoIndice é informado', () => {
+    const cartoes = [
+      cartao({ id: 'origem', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'dest-1', status: 'fase_tecnica', ordem: 0 }),
+      cartao({ id: 'dest-2', status: 'fase_tecnica', ordem: 1 }),
+    ];
+
+    // Insere 'origem' no meio de 'dest-1' e 'dest-2' (índice 1)
+    const depois = moverCard(cartoes, 'origem', 'fase_tecnica', 1, 1);
+    const vagasDestino = colunasDoQuadro(depois).find((col) => col.status === 'fase_tecnica')?.vagas ?? [];
+
+    expect(vagasDestino.map((v) => v.id)).toEqual(['dest-1', 'origem', 'dest-2']);
+    expect(vagasDestino.map((v) => v.ordem)).toEqual([0, 1, 2]);
+    expect(colunasDoQuadro(depois).find((col) => col.status === 'aplicado')?.vagas).toEqual([]);
+  });
+
+  it('reordenarCards limita índices negativos ou excessivos com segurança', () => {
+    const cartoes = [
+      cartao({ id: 'a', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'b', status: 'aplicado', ordem: 1 }),
+    ];
+
+    // Índice negativo cai no início (0)
+    const inicio = reordenarCards(cartoes, 'b', 'aplicado', -5);
+    expect(colunasDoQuadro(inicio).find((col) => col.status === 'aplicado')?.vagas.map((v) => v.id)).toEqual(['b', 'a']);
+
+    // Índice excessivo cai no final
+    const fim = reordenarCards(cartoes, 'a', 'aplicado', 100);
+    expect(colunasDoQuadro(fim).find((col) => col.status === 'aplicado')?.vagas.map((v) => v.id)).toEqual(['b', 'a']);
+  });
 });
 
 describe('posicaoDe e reverterMovimento', () => {
@@ -284,5 +332,59 @@ describe('assinaturaDoQuadro', () => {
     const depois = assinaturaDoQuadro([cartao({ id: 'a', ordem: 2 })]);
 
     expect(antes).not.toBe(depois);
+  });
+});
+
+describe('resolverDestinoArraste', () => {
+  it('retorna null quando solto sobre si mesmo ou id inexistente', () => {
+    const cartoes = [cartao({ id: 'a', status: 'aplicado' })];
+    expect(resolverDestinoArraste(cartoes, 'a', 'a')).toBeNull();
+    expect(resolverDestinoArraste(cartoes, 'nao-existe', 'a')).toBeNull();
+    expect(resolverDestinoArraste(cartoes, 'a', 'alvo-invalido')).toBeNull();
+  });
+
+  it('identifica drop diretamente sobre container de outra coluna', () => {
+    const cartoes = [
+      cartao({ id: 'a', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'b', status: 'fase_tecnica', ordem: 0 }),
+    ];
+
+    expect(resolverDestinoArraste(cartoes, 'a', 'coluna-fase_tecnica')).toEqual({
+      destino: 'fase_tecnica',
+      novoIndice: 1,
+    });
+  });
+
+  it('retorna null ao soltar sobre container da mesma coluna sem outro card', () => {
+    const cartoes = [cartao({ id: 'a', status: 'aplicado', ordem: 0 })];
+    expect(resolverDestinoArraste(cartoes, 'a', 'coluna-aplicado')).toBeNull();
+  });
+
+  it('calcula o índice correto quando solto sobre outro card da mesma coluna', () => {
+    const cartoes = [
+      cartao({ id: 'c1', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'c2', status: 'aplicado', ordem: 1 }),
+      cartao({ id: 'c3', status: 'aplicado', ordem: 2 }),
+    ];
+
+    // Arrastar c3 para cima de c1 deve indicar índice 0
+    expect(resolverDestinoArraste(cartoes, 'c3', 'c1')).toEqual({
+      destino: 'aplicado',
+      novoIndice: 0,
+    });
+  });
+
+  it('calcula o índice correto quando solto sobre card em outra coluna', () => {
+    const cartoes = [
+      cartao({ id: 'origem', status: 'aplicado', ordem: 0 }),
+      cartao({ id: 'dest-1', status: 'proposta', ordem: 0 }),
+      cartao({ id: 'dest-2', status: 'proposta', ordem: 1 }),
+    ];
+
+    // Arrastar 'origem' para cima de 'dest-2' deve indicar índice 1 na coluna 'proposta'
+    expect(resolverDestinoArraste(cartoes, 'origem', 'dest-2')).toEqual({
+      destino: 'proposta',
+      novoIndice: 1,
+    });
   });
 });
