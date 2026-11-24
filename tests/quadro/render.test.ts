@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { type VagaRow } from '@/domain/vaga';
 import { Quadro } from '@/quadro/Quadro';
+import { DrawerDetalhesVaga } from '@/quadro/DrawerDetalhesVaga';
 import { paraCartoes } from '@/quadro/estado';
 
 /**
@@ -255,5 +256,59 @@ describe('renderização — conteúdo sem JavaScript', () => {
     // As colunas possuem os identificadores acessíveis
     expect(html).toContain('id="coluna-aplicado"');
     expect(html).toContain('aria-labelledby="coluna-aplicado"');
+  });
+});
+
+describe('renderização — drawer de detalhes da vaga', () => {
+  it('não renderiza nada quando nenhum card está selecionado', () => {
+    const html = renderToStaticMarkup(
+      createElement(DrawerDetalhesVaga, { cartao: null, aoFechar: () => {} }) as ReactElement,
+    );
+
+    expect(html).toBe('');
+  });
+
+  it('renderiza dialog aberto com detalhes e lista numerada de requisitos', () => {
+    const [cartao] = paraCartoes([
+      linha({
+        titulo: 'Engenheira de Software',
+        empresa: 'Empresa X',
+        requisitos: ['TypeScript', 'Next.js', 'PostgreSQL'],
+      }),
+    ]);
+
+    const html = renderToStaticMarkup(
+      createElement(DrawerDetalhesVaga, {
+        cartao: cartao ?? null,
+        aoFechar: () => {},
+      }) as ReactElement,
+    );
+
+    expect(html).toContain('<dialog open=""');
+    expect(html).toContain('aria-label="Detalhes de Engenheira de Software"');
+    expect(html).toContain('Engenheira de Software');
+    expect(html).toContain('Empresa X');
+    expect(html).toContain('Requisitos');
+    expect(html).toContain('(3)');
+    expect(html).toContain('TypeScript');
+    expect(html).toContain('Next.js');
+    expect(html).toContain('PostgreSQL');
+    expect(html).toContain('01');
+    expect(html).toContain('02');
+    expect(html).toContain('03');
+    expect(html).toContain('aria-label="Fechar detalhes da vaga"');
+  });
+
+  it('renderiza mensagem de estado vazio quando não há requisitos extraídos', () => {
+    const [cartao] = paraCartoes([linha({ requisitos: [] })]);
+
+    const html = renderToStaticMarkup(
+      createElement(DrawerDetalhesVaga, {
+        cartao: cartao ?? null,
+        aoFechar: () => {},
+      }) as ReactElement,
+    );
+
+    expect(html).toContain('Nenhum requisito extraído para esta vaga.');
   });
 });
