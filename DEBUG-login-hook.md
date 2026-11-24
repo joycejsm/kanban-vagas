@@ -212,3 +212,21 @@ contagem viraram etapas separadas, e a linha é fechada pelo `id` que a tentativ
 importa porque a API de escrita **ignora `order` e `limit` em `PATCH`**: o filtro anterior
 (`resultado = 'pendente'` + `order` + `limit`) atualizava todas as pendências do usuário, e com
 duas requisições em voo uma fechava a tentativa da outra.
+
+## Lições da medição das páginas e extração estruturada (2026-10-01)
+
+Duas lições críticas surgiram durante a investigação da extração da Gupy:
+
+1. **Testar a URL que o sistema realmente processa:** A suposição de que a Gupy devolvia apenas 3.905 bytes
+   de casca de React sem `JobPosting` veio da medição da página de login/autenticação (`/candidates/auth`),
+   e não da página real de vaga (`/job/...`). A página de vaga responde 200 com ~117 KB e traz o `JobPosting`
+   estruturado completo em JSON-LD, porém com entidades HTML escapadas (`{&quot;@context&quot;...}`).
+2. **Duas fontes que discordam são um sinal a investigar, nunca a ignorar:** O handoff anterior registrava
+   "140 KB de conteúdo real" e "3.905 bytes" lado a lado. Medições conflitantes devem ser resolvidas antes
+   de qualquer proposta de mudança ser escrita.
+
+### Próxima change prevista: Limpeza de `extrairListaDaDescricao`
+Mesmo com o `description` limpo como HTML antes da extração da lista, o primeiro item de requisitos em
+páginas com headings (como `<h2>Descrição da vaga</h2>`) ainda pode sair concatenado com o título da seção.
+Isso decorre da separação entre headings e o texto corrido, e foi registrado como change própria para manter
+o escopo focado e não misturar duas causas distintas.

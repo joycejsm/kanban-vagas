@@ -131,7 +131,11 @@ export function extrairLdJson(html: string): VagaEstruturada | null {
     try {
       dados = JSON.parse(bruto);
     } catch {
-      return; // JSON-LD malformado é comum; apenas ignoramos.
+      try {
+        dados = JSON.parse(decodificarEntidades(bruto));
+      } catch {
+        return; // JSON-LD malformado é comum; apenas ignoramos.
+      }
     }
 
     for (const vaga of localizarJobPostings(dados)) {
@@ -142,6 +146,16 @@ export function extrairLdJson(html: string): VagaEstruturada | null {
 
   // Com múltiplos JobPosting na página, o primeiro com dados completos vence.
   return resultados.find((r) => r.titulo !== '' && r.empresa !== '' && r.requisitos.length > 0) ?? null;
+}
+
+/**
+ * Decodifica entidades HTML quando o bloco JSON-LD vem escapado (ex.: Gupy).
+ * Usa um elemento <textarea> no Cheerio, que decodifica entidades preservando o texto e marcações.
+ */
+function decodificarEntidades(texto: string): string {
+  const seguro = texto.replace(/<\/textarea>/gi, '&lt;/textarea&gt;');
+  const $ = cheerio.load(`<textarea>${seguro}</textarea>`);
+  return $('textarea').text();
 }
 
 /** Achata o JSON-LD, que pode ser objeto, array ou @graph aninhado. */
@@ -216,7 +230,7 @@ function extrairRequisitos(vaga: Record<string, unknown>): string[] {
   const descricao = primeiroTexto(vaga['description']);
   if (descricao === '') return [];
 
-  return extrairListaDaDescricao(descricao);
+  return extrairListaDaDescricao(extrairTexto(descricao));
 }
 
 /**

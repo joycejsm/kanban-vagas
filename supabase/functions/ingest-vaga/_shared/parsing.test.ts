@@ -272,3 +272,150 @@ describe('extração de requisitos da descrição', () => {
     assertEquals(extrairListaDaDescricao(descricao).length <= 30, true);
   });
 });
+
+describe('extrairLdJson — decodificação de entidades HTML (bloco escapado)', () => {
+  const jobPostingValido = {
+    '@context': 'https://schema.org',
+    '@type': 'JobPosting',
+    title: 'Engenheira de Software',
+    hiringOrganization: { '@type': 'Organization', name: 'Empresa Gupy' },
+    description: '<h2>Descrição da vaga</h2><p>- TypeScript</p><p>- React</p><p>- Node.js</p>',
+    experienceRequirements: 'Pleno',
+  };
+
+  const jsonValido = JSON.stringify(jobPostingValido);
+  const jsonEscapado = jsonValido
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  it('produz o mesmo resultado para bloco escapado (&quot;) e para JSON válido', () => {
+    const htmlValido = `<script type="application/ld+json">${jsonValido}</script>`;
+    const htmlEscapado = `<script type="application/ld+json">${jsonEscapado}</script>`;
+
+    const vagaValida = extrairLdJson(htmlValido);
+    const vagaEscapada = extrairLdJson(htmlEscapado);
+
+    assertEquals(vagaEscapada !== null, true);
+    assertEquals(vagaValida !== null, true);
+    assertEquals(vagaEscapada, vagaValida);
+    assertEquals(vagaEscapada?.titulo, 'Engenheira de Software');
+    assertEquals(vagaEscapada?.empresa, 'Empresa Gupy');
+    assertEquals(vagaEscapada?.requisitos.includes('TypeScript'), true);
+    assertEquals(vagaEscapada?.requisitos.includes('React'), true);
+    assertEquals(vagaEscapada?.requisitos.includes('Node.js'), true);
+    assertEquals(vagaEscapada?.senioridade, 'Pleno');
+  });
+
+  it('ignora bloco que não é JSON nem depois de decodificado sem lançar', () => {
+    const html = `<script type="application/ld+json">{&quot;invalido&quot;: nao-json}</script>`;
+
+    assertEquals(extrairLdJson(html), null);
+  });
+});
+
+describe('extrairRequisitos — description em HTML', () => {
+  it('description com marcação não produz requisito contendo <h2>, <p>, <span> ou </li>', () => {
+    const html = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@type': 'JobPosting',
+          title: 'Dev Frontend',
+          hiringOrganization: { name: 'Empresa Web' },
+          description: '<h2>Requisitos da vaga</h2><p>- <span>HTML &amp; CSS</span></li><li>- TypeScript</li><li>- React</li>',
+        })}
+      </script>`;
+
+    const vaga = extrairLdJson(html);
+    assertEquals(vaga !== null, true);
+    assertEquals(vaga!.requisitos.length > 0, true);
+
+    for (const req of vaga!.requisitos) {
+      assertEquals(/<[hH]2>|<[pP]>|<[sS]pan>|<\/[lL]i>/.test(req), false);
+    }
+  });
+
+  it('o description em HTML gera a mesma lista que o mesmo conteúdo sem marcação', () => {
+    const textoSemMarcacao = '- TypeScript\n- React\n- Node.js';
+    const textoComMarcacao = '<p>- TypeScript</p><p>- React</p><p>- Node.js</p>';
+
+    const htmlComTag = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@type': 'JobPosting',
+          title: 'Dev Fullstack',
+          hiringOrganization: { name: 'Empresa Teste' },
+          description: textoComMarcacao,
+        })}
+      </script>`;
+
+    const htmlSemTag = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@type': 'JobPosting',
+          title: 'Dev Fullstack',
+          hiringOrganization: { name: 'Empresa Teste' },
+          description: textoSemMarcacao,
+        })}
+      </script>`;
+
+    const vagaComTag = extrairLdJson(htmlComTag);
+    const vagaSemTag = extrairLdJson(htmlSemTag);
+
+    assertEquals(vagaComTag !== null, true);
+    assertEquals(vagaSemTag !== null, true);
+    assertEquals(vagaComTag?.requisitos, vagaSemTag?.requisitos);
+  });
+
+  it('preserva a preferência pela lista estruturada (requirements/qualifications) sobre description', () => {
+    const html = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@type': 'JobPosting',
+          title: 'Dev Backend',
+          hiringOrganization: { name: 'Empresa Teste' },
+          requirements: ['Go', 'PostgreSQL'],
+          description: '<p>- Java</p><p>- Spring</p>',
+        })}
+      </script>`;
+
+    const vaga = extrairLdJson(html);
+    assertEquals(vaga?.requisitos, ['Go', 'PostgreSQL']);
+  });
+});
+
+describe('extração estruturada de página real da Gupy / Stefanini (sem modelo)', () => {
+  it('extrai vaga da Stefanini com bloco escapado e description HTML dispensando o Gemini', () => {
+    // Simula a estrutura exata da página de vaga da Stefanini na Gupy (~118 KB com ld+json escapado)
+    const paginaGupyStefanini = `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <title>Desenvolvedor(a) Fullstack - Stefanini Group</title>
+    <script type="application/ld+json">
+{&quot;@context&quot;:&quot;http://schema.org&quot;,&quot;@type&quot;:&quot;JobPosting&quot;,&quot;title&quot;:&quot;Desenvolvedor(a) Fullstack&quot;,&quot;hiringOrganization&quot;:{&quot;@type&quot;:&quot;Organization&quot;,&quot;name&quot;:&quot;Stefanini Group&quot;},&quot;description&quot;:&quot;&lt;h2&gt;Descrição da vaga&lt;/h2&gt;&lt;p&gt;Procuramos desenvolvedor fullstack.&lt;/p&gt;&lt;h2&gt;Requisitos e qualificações&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;- Experiência com TypeScript e React&lt;/li&gt;&lt;li&gt;- Domínio de Node.js e APIs REST&lt;/li&gt;&lt;li&gt;- Conhecimento em Docker e SQL&lt;/li&gt;&lt;/ul&gt;&quot;,&quot;experienceRequirements&quot;:&quot;Pleno&quot;}
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <h1>Desenvolvedor(a) Fullstack</h1>
+      <p>Stefanini Group</p>
+    </div>
+  </body>
+</html>`;
+
+    const vaga = extrairLdJson(paginaGupyStefanini);
+
+    assertEquals(vaga !== null, true);
+    assertEquals(vaga?.titulo, 'Desenvolvedor(a) Fullstack');
+    assertEquals(vaga?.empresa, 'Stefanini Group');
+    assertEquals(vaga?.senioridade, 'Pleno');
+    assertEquals(vaga?.requisitos.includes('Experiência com TypeScript e React'), true);
+    assertEquals(vaga?.requisitos.includes('Domínio de Node.js e APIs REST'), true);
+    assertEquals(vaga?.requisitos.includes('Conhecimento em Docker e SQL'), true);
+    // Confirma que nenhuma marcação HTML vazou para os itens
+    for (const req of vaga!.requisitos) {
+      assertEquals(/<[^>]+>/.test(req), false);
+    }
+  });
+});

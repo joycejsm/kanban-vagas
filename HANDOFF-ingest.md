@@ -315,18 +315,15 @@ ok. Produção continua na **v4** da função `ingest-vaga` — nada foi implant
 
 ### O que falta, em ordem
 
-1. **`! git push origin main`** — 28 commits. Bloqueia tudo.
-2. **Implantar a UI.** Commitada, não em produção. Não sei como o Next é implantado neste projeto.
-3. **`fix-ld-json-entity-decoding`** — 12 tasks, 0 feitas. Continua sendo o próximo passo de
-   *código*, e é desacelerar: tira uma chamada ao Gemini do caminho principal. A task 3.2 prova a
-   retirada da dependência sem depender do Gemini estar de pé.
-4. **Task 3.4** da `fix-ingest-origin-and-error-codes` — só no navegador: e-mail fora da allowlist
-   tem que mostrar "falta de permissão" e **não** "sua sessão expirada".
-5. **Arquivar** `fix-ingest-audit-window-and-outcome` — 15/15, nenhuma pendente. É a change da
-   medição falsa que a sessão passada corrigiu.
-6. **A limpeza de `extrairListaDaDescricao`**, por decisão da usuária: depois do conserto do item 3,
-   o primeiro requisito ainda sai como `"Descrição da vagaA Omie tem como propósito…"`. Change
-   própria, para não misturar duas causas.
+1. **`! git push origin main`** — Commits locais acumulados. Bloqueia sincronização remota.
+2. **Deploy da Edge Function `ingest-vaga` (v5)** — com o código de `fix-ld-json-entity-decoding`.
+3. **Implantar a UI.** Commitada, não em produção. Não sei como o Next é implantado neste projeto.
+4. **Arquivar as changes concluídas:**
+   - `fix-ingest-origin-and-error-codes` (13/13 tasks concluídas).
+   - `fix-ingest-audit-window-and-outcome` (15/15 tasks concluídas).
+   - `fix-ld-json-entity-decoding` (12/12 tasks concluídas).
+5. **A limpeza de `extrairListaDaDescricao`**, por decisão da usuária: o primeiro requisito ainda pode
+   sair concatenado ao cabeçalho `<h2>` em páginas com headings de seção. Change própria.
 
 ### Ambiente local (nada disso é produção, e nada mais depende)
 
@@ -337,3 +334,25 @@ remota. Pode ser derrubado à vontade — apagar o token local é irreversível,
 
 Efeito colateral desta sessão: o teste de chave SSH adicionou `github.com` ao `~/.ssh/known_hosts`.
 Inofensivo, mas foi a agente.
+
+---
+
+## 8. Sessão de 2026-11-23 — Conclusão de `fix-ld-json-entity-decoding`
+
+### O que foi feito e provado
+
+1. **Decodificação de JSON-LD escapado como plano B (`parsing.ts`):**
+   - O `JSON.parse` do texto cru continua sendo o caminho primário, garantindo impacto zero em sites que já funcionam.
+   - No `catch`, aciona o plano B: `decodificarEntidades` via elemento `<textarea>` no Cheerio, que decodifica com segurança entidades como `&quot;`, `&amp;` e `<` / `>`.
+   - Vagas da Gupy (como Stefanini Group, ~118 KB) agora têm seu `JobPosting` parseado diretamente, dispensando a chamada ao modelo Gemini e eliminando o risco de falhas por indisponibilidade transitória (ex.: 503 high demand).
+
+2. **Sanitização de HTML no `description` antes de extrair requisitos:**
+   - Em `extrairRequisitos`, o campo `description` do schema.org passa por `extrairTexto()` antes de ser entregue a `extrairListaDaDescricao()`.
+   - Evita o vazamento de marcações HTML (`<h2>`, `<p>`, `<span>`, `</li>`) para a lista de requisitos e impede que lixo de tags esgote o teto de 30 itens.
+
+3. **Validação completa:**
+   - Testes Deno da função (`npm run test:funcao`): 42 passed (174 steps).
+   - Testes unitários do frontend (`npm test`): 18 arquivos, 292 testes passed.
+   - Testes de banco pgTAP (`npm run test:db`): 2 arquivos, 51 testes passed.
+   - Typecheck (`npm run typecheck`): limpo, zero erros.
+   - Suite unificada `npm run verificar`: 100% PASS.
