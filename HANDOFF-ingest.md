@@ -386,3 +386,8 @@ Inofensivo, mas foi a agente.
    - Typecheck (`npm run typecheck`): limpo, zero erros.
    - Suite unificada `npm run verificar`: 100% PASS.
    - OpenSpec: 10/10 tasks concluídas, spec `ingest-vaga` atualizada e change arquivada em `openspec/changes/archive/2026-11-23-fix-description-heading-separation/`.
+
+6. **Deploy da Edge Function `ingest-vaga` (v6):**
+   - Implantada no Supabase remoto com sucesso via `supabase functions deploy ingest-vaga`.
+   - Versão ativa atualizada de v5 para **v6**, com `verify_jwt: true` preservado.
+   - Gateway responde `401` para requisições sem sessão, confirmando o isolamento do endpoint.
