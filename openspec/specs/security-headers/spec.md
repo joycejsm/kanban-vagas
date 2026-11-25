@@ -13,9 +13,10 @@ A aplicação SHALL servir uma Content Security Policy em que `script-src` seja 
 nonce próprio de cada resposta e **nunca** de `'unsafe-inline'`; `'unsafe-eval'` SHALL NOT aparecer em resposta
 servida em produção; `connect-src` SHALL ficar restrito ao domínio do projeto Supabase, aos endpoints de
 autenticação do Google e à própria origem; `img-src` SHALL incluir `'self'`, `data:` e
-`lh3.googleusercontent.com` para exibir o avatar do usuário; `object-src` SHALL ser `'none'`; `base-uri` SHALL
-ser `'self'`; e `frame-ancestors` SHALL ser `'none'`. Valores necessários que dependam de build dinâmico
-SHALL ser gerados a partir de configuração do servidor, nunca fixados no repositório.
+`lh3.googleusercontent.com` para exibir o avatar do usuário; `font-src` SHALL incluir `'self'` e `data:` para
+permitir fontes auto-hospedadas e embutidas; `object-src` SHALL ser `'none'`; `base-uri` SHALL ser `'self'`; e
+`frame-ancestors` SHALL ser `'none'`. Valores necessários que dependam de build dinâmico SHALL ser gerados a
+partir de configuração do servidor, nunca fixados no repositório.
 
 O nonce existe porque o App Router emite script inline em toda resposta — o *flight payload* do RSC e
 `(self.__next_f=…).push([0])` — e o valor muda a cada requisição, de modo que nem `'unsafe-inline'` nem hash
@@ -49,6 +50,12 @@ e o atributo `nonce` dos scripts da resposta SHALL receber o mesmo valor.
 - **WHEN** o navegador aplica a CSP
 - **THEN** a imagem SHALL ser carregada sem violar a política, e nenhuma outra origem SHALL estar autorizada
   em `img-src`
+
+#### Scenario: Fontes embutidas são permitidas
+
+- **GIVEN** uma fonte servida como URI `data:`
+- **WHEN** o navegador aplica a CSP
+- **THEN** a fonte SHALL ser carregada, e `font-src` SHALL continuar restrito a `'self'` e `data:`
 
 #### Scenario: Conexões fora da lista são bloqueadas
 

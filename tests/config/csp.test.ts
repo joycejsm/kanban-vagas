@@ -27,7 +27,7 @@ const POLITICA_ESPERADA = [
   `script-src 'self' 'nonce-${NONCE}'`,
   "connect-src 'self' https://abcdefghijklmnop.supabase.co https://accounts.google.com https://apis.google.com",
   "img-src 'self' data: lh3.googleusercontent.com",
-  "font-src 'self'",
+  "font-src 'self' data:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
@@ -135,6 +135,14 @@ describe('montarCsp', () => {
     expect(imgSrc).toBe("img-src 'self' data: lh3.googleusercontent.com");
     // Três origens, e só: `split` inclui o nome da diretiva, que não é origem.
     expect(imgSrc?.split(' ').slice(1)).toHaveLength(3);
+  });
+
+  it('font-src autoriza fontes da própria origem e fontes embutidas como data:', () => {
+    const fontSrc = montarCsp(CONFIG, NONCE)
+      .split('; ')
+      .find((d) => d.startsWith('font-src'));
+
+    expect(fontSrc).toBe("font-src 'self' data:");
   });
 
   it('a origem do Supabase vem da configuração, e não do repositório', () => {

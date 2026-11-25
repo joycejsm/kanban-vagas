@@ -84,7 +84,7 @@ export function montarCsp(
     `script-src 'self' 'nonce-${nonce}'${emProducao ? '' : " 'unsafe-eval'"}`,
     `connect-src 'self' ${origemSupabase} ${ORIGENS_DE_AUTENTICACAO_GOOGLE.join(' ')}`,
     `img-src ${ORIGENS_DE_IMAGEM.join(' ')}`,
-    `font-src 'self'`,
+    `font-src 'self' data:`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `frame-ancestors 'none'`,
