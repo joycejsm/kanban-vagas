@@ -66,6 +66,7 @@ export async function buscarPagina(url: string, opcoes: OpcoesBuscar = {}): Prom
           'User-Agent': USER_AGENT,
           Accept: 'text/html,application/xhtml+xml',
           'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+          Referer: validacao.url,
         },
       });
 
