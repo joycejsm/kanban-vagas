@@ -432,14 +432,21 @@ function extrairSenioridade(vaga: Record<string, unknown>): string {
   }
 
   const titulo = primeiroTexto(vaga['title']).toLowerCase();
+  const senioridadeDoTitulo = inferirSenioridade(titulo);
+  if (senioridadeDoTitulo !== null) {
+    return senioridadeDoTitulo;
+  }
+
   const descricao = primeiroTexto(vaga['description']).toLowerCase();
+  return inferirSenioridade(descricao) ?? 'Não informado';
+}
 
-  const fonte = `${titulo} ${descricao}`;
-  if (/\b(sênior|senior|sr\.?|especialista|staff|principal)\b/.test(fonte)) return 'Senior';
-  if (/\b(pleno|mid[- ]?level|intermediário|intermediario)\b/.test(fonte)) return 'Pleno';
-  if (/\b(júnior|junior|jr\.?|estágio|estagio|trainee|entry[- ]level)\b/.test(fonte)) return 'Junior';
+function inferirSenioridade(texto: string): string | null {
+  if (/\b(sênior|senior|sr\.?|especialista|staff|principal)\b/.test(texto)) return 'Senior';
+  if (/\b(pleno|mid[- ]?level|intermediário|intermediario)\b/.test(texto)) return 'Pleno';
+  if (/\b(júnior|junior|jr\.?|estágio|estagio|trainee|entry[- ]level)\b/.test(texto)) return 'Junior';
 
-  return 'Não informado';
+  return null;
 }
 
 function normalizarSenioridade(valor: string): string {

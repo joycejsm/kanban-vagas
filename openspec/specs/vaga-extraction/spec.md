@@ -12,8 +12,9 @@ como marcação.
 ### Requirement: Busca limitada e content-type verificado
 
 A função SHALL buscar a página com timeout de 8 segundos e interromper a leitura se o corpo exceder 1,5 MB.
-A resposta SHALL ser usada apenas quando o `content-type` for `text/html`; nos demais casos a função SHALL
-interromper e responder com erro. A requisição SHALL identificar-se por um User-Agent próprio.
+A resposta SHALL ser usada apenas quando o status HTTP indicar sucesso e o `content-type` for `text/html`; nos
+demais casos a função SHALL interromper e responder com erro, sem enviar o corpo ao parser ou ao modelo. A
+requisição SHALL identificar-se por um User-Agent próprio.
 
 #### Scenario: Resposta muito grande é abortada
 
@@ -27,6 +28,13 @@ interromper e responder com erro. A requisição SHALL identificar-se por um Use
 - **GIVEN** uma URL que responde `application/pdf` ou `image/png`
 - **WHEN** a função verifica o tipo da resposta
 - **THEN** a função SHALL interromper e responder com erro
+
+#### Scenario: Resposta HTTP 403 não é enviada à extração
+
+- **GIVEN** uma página de vaga cuja resposta HTTP é `403`
+- **WHEN** a função busca a página
+- **THEN** a função SHALL interromper a busca, responder com erro de página inacessível e NÃO SHALL enviar o
+  corpo dessa resposta ao parser JSON-LD ou ao modelo
 
 #### Scenario: Timeout é respeitado
 
@@ -71,11 +79,33 @@ sem chamar o modelo de linguagem.
 - **WHEN** a extração é executada
 - **THEN** a vaga SHALL ser persistida sem chamada ao modelo de linguagem
 
+#### Scenario: Indeed fornece requisitos dentro da descrição HTML do JobPosting
+
+- **GIVEN** uma página Indeed com `application/ld+json` do tipo `JobPosting`, contendo `title`,
+  `hiringOrganization.name` e `description` HTML com seções de requisitos e itens de lista, mas sem campos
+  separados `requirements` ou `experienceRequirements`
+- **WHEN** a extração estruturada processa o anúncio
+- **THEN** ela SHALL obter título e empresa dos campos estruturados e requisitos da descrição HTML, dispensando
+  o modelo quando os dados resultantes forem suficientes
+
 #### Scenario: ld+json insuficiente recorre ao modelo
 
 - **GIVEN** uma página com `JobPosting` incompleto, ou sem `ld+json`
 - **WHEN** a extração estruturada não produz dados suficientes
 - **THEN** a função SHALL recorrer à extração por modelo de linguagem
+
+### Requirement: Inferência de senioridade prioriza fontes específicas
+
+Quando `experienceRequirements` não estiver disponível, a função SHALL inferir a senioridade do título antes de
+examinar a descrição. Menções incidentais a níveis em requisitos ou benefícios — por exemplo, "Excel
+intermediário" numa vaga intitulada "Junior" — SHALL NOT sobrescrever a senioridade indicada no título.
+
+#### Scenario: O título prevalece sobre adjetivo de habilidade na descrição
+
+- **GIVEN** uma vaga intitulada "Técnico de Suporte Junior" cuja descrição menciona "Excel básico ou
+  intermediário"
+- **WHEN** a senioridade é inferida sem `experienceRequirements`
+- **THEN** a senioridade SHALL ser `Junior`
 
 ### Requirement: Conteúdo da página tratado como dado, nunca como instrução
 

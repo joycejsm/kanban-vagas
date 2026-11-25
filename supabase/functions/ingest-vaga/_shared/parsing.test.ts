@@ -187,6 +187,29 @@ describe('extrairLdJson — caminho estruturado', () => {
     assertEquals(extrairLdJson(html)?.senioridade, 'Pleno');
   });
 
+  it('prioriza Junior no título sobre "intermediário" citado nos requisitos do Indeed', () => {
+    const html = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@context': 'http://schema.org',
+          '@type': 'JobPosting',
+          title: 'Técnico de Suporte Junior',
+          hiringOrganization: {
+            '@type': 'Organization',
+            name: 'Pague Menos | Vagas na Matriz Administrativa em Fortaleza - CE',
+          },
+          description: '<div><b><br>Requisitos e qualificações</b><br><ul><li>Conhecimento em Linux</li></ul><p>DIFERENCIAIS</p><ul><li>Excel básico ou intermediário;</li></ul><p>Informações adicionais</p></div>',
+        })}
+      </script>`;
+
+    const vaga = extrairLdJson(html);
+
+    assertEquals(vaga?.titulo, 'Técnico de Suporte Junior');
+    assertEquals(vaga?.empresa, 'Pague Menos | Vagas na Matriz Administrativa em Fortaleza - CE');
+    assertEquals(vaga?.requisitos, ['Conhecimento em Linux', 'Excel básico ou intermediário;']);
+    assertEquals(vaga?.senioridade, 'Junior');
+  });
+
   it('assume "Não informado" quando não dá para inferir', () => {
     const html = `
       <script type="application/ld+json">
