@@ -150,6 +150,24 @@ const CODIGO_DA_FUNCAO: Record<string, CodigoErroIngestao> = {
  * @param corpo Corpo já parseado, se houver. Lido pelo `code` e registrado no log.
  */
 export function mapearErroIngestao(status: number, corpo?: unknown): FalhaIngestao {
+  // If the Edge Function didn't provide a code and we got a 403 (e.g., Cloudflare block), treat it as extraction failure so UI shows fallback text field.
+  const codigoDaFuncao = extrairCodigoDoCorpo(corpo);
+  let code = (codigoDaFuncao === undefined ? undefined : CODIGO_DA_FUNCAO[codigoDaFuncao]) ??
+    CODIGO_POR_STATUS[status] ??
+    'erro';
+  if (!codigoDaFuncao && status === 403) {
+    code = 'extracao_falhou';
+  }
+
+  console.error(
+    '[acoes/erros] status=%d code=%s code_funcao=%s',
+    status,
+    code,
+    codigoDaFuncao ?? 'desconhecido',
+  );
+
+  return { ok: false, code, mensagem: MENSAGENS[code] };
+}
   // O código que a função reportou vai para o log, e é também o que decide quando reconhecido.
   const codigoDaFuncao = extrairCodigoDoCorpo(corpo);
 
