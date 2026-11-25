@@ -126,23 +126,26 @@ export function etapaRateLimit(janela: Janelas): ErroPipeline | null {
   return null;
 }
 
-/**
- * Validação e busca da URL. O módulo de segurança é injetado, mas o handler usa
- * sempre `deps.url.validarUrl` — a mesma função que revalida cada redirect.
- */
+/** Texto colado dispensa DNS e fetch, mas mantém as validações locais da URL. */
 export async function etapaConteudo(
   dados: CorpoIngestao,
   deps: Dependencias,
 ): Promise<{ ok: true; conteudo: string } | { ok: false; falha: ErroPipeline }> {
-  const validacao = await deps.url.validarUrl(dados.url);
+  const validacao =
+    dados.texto === undefined
+      ? await deps.url.validarUrl(dados.url)
+      : deps.url.validarFormaUrl(dados.url);
+
   if (!validacao.ok) {
     return { ok: false, falha: ERROS.urlInvalida() };
   }
 
+  if (dados.texto !== undefined) {
+    return { ok: true, conteudo: dados.texto };
+  }
+
   try {
-    // `texto` colado pelo usuário dispensa o scraping: a URL segue válida e
-    // normalizada, mas não é buscada.
-    const conteudo = dados.texto ? dados.texto : await deps.buscar(validacao.url);
+    const conteudo = await deps.buscar(validacao.url);
     return { ok: true, conteudo };
   } catch (erro) {
     return { ok: false, falha: erro instanceof Error && erro.name === 'PaginaGrandeDemaisError'

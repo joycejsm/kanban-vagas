@@ -24,6 +24,10 @@ export type ResultadoValidacaoUrl =
   | { ok: true; url: string; enderecos: string[] }
   | { ok: false; razao: string };
 
+export type ResultadoValidacaoFormaUrl =
+  | { ok: true; url: string }
+  | { ok: false; razao: string };
+
 /** Uma URL passa por estes passos, nesta ordem, antes de qualquer conexão. */
 export const LIMITE_URL = 2048;
 
@@ -56,16 +60,8 @@ const SUFIXOS_BLOQUEADOS = ['.local', '.internal', '.localhost', '.localdomain',
 /** Nomes que nunca alcançam a internet pública. */
 const NOMES_BLOQUEADOS = new Set(['localhost', 'localhost.localdomain', 'ip6-localhost', 'ip6-loopback']);
 
-/**
- * Valida a URL completa: forma, host e resolução DNS.
- *
- * É a MESMA função usada na entrada e em cada redirect — por isso ela é pura em
- * relação ao `fetch` e recebe o resolvedor por parâmetro (design D3).
- */
-export async function validarUrl(
-  bruto: string,
-  resolver: ResolvedorDns = resolverDnsPadrao,
-): Promise<ResultadoValidacaoUrl> {
+/** Valida o formato e os hosts proibidos sem resolver o DNS. */
+export function validarFormaUrl(bruto: string): ResultadoValidacaoFormaUrl {
   if (bruto.length > LIMITE_URL) {
     return { ok: false, razao: 'url-longa' };
   }
@@ -81,8 +77,6 @@ export async function validarUrl(
     return { ok: false, razao: 'esquema' };
   }
 
-  // Credenciais embutidas (user:pass@) são rejeitadas: são tanto um vetor de
-  // phishing quanto uma forma de smuglar dados no host.
   if (url.username !== '' || url.password !== '') {
     return { ok: false, razao: 'credenciais' };
   }
@@ -98,10 +92,25 @@ export async function validarUrl(
   }
 
   if (ehIpLiteral(host)) {
-    // IP literal nunca é aceito: pode apontar para a rede interna ou para a
-    // interface da própria função.
     return { ok: false, razao: 'ip-literal' };
   }
+
+  return { ok: true, url: url.toString() };
+}
+
+/**
+ * Valida a URL completa: forma, host e resolução DNS.
+ *
+ * É a MESMA função usada na entrada e em cada redirect — por isso ela é pura em
+ * relação ao `fetch` e recebe o resolvedor por parâmetro (design D3).
+ */
+export async function validarUrl(
+  bruto: string,
+  resolver: ResolvedorDns = resolverDnsPadrao,
+): Promise<ResultadoValidacaoUrl> {
+  const forma = validarFormaUrl(bruto);
+  if (!forma.ok) return forma;
+  const url = new URL(forma.url);
 
   let enderecos: string[];
   try {
@@ -125,7 +134,7 @@ export async function validarUrl(
     }
   }
 
-  return { ok: true, url: url.toString(), enderecos };
+  return { ok: true, url: forma.url, enderecos };
 }
 
 /** Detecta IPv4 e IPv6 literais, incluindo as formas abreviadas do IPv6. */

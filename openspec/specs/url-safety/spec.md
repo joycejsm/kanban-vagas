@@ -70,11 +70,16 @@ qualquer nome terminando em `.local` ou `.internal`.
 
 ### Requirement: Resolução DNS e bloqueio de faixas não públicas
 
-A função SHALL resolver o host da URL, obtendo registros A e AAAA, e SHALL recusar o destino se **qualquer**
-endereço resolvido pertencer a faixa não pública. As faixas bloqueadas são: `0.0.0.0/8`, `10.0.0.0/8`,
+A função SHALL resolver o host da URL, obtendo registros A e AAAA, ao buscar a página para extração, e SHALL
+recusar o destino se **qualquer** endereço resolvido pertencer a faixa não pública. As faixas bloqueadas são:
+`0.0.0.0/8`, `10.0.0.0/8`,
 `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`,
 `fe80::/10`, o endereço não roteável `::` e endereços IPv4 mapeados em IPv6. Host que não resolve SHALL ser
 recusado. Nenhum endereço resolvido SHALL ser usado como destino pelo corpo da resposta.
+
+Quando o usuário fornece texto colado, a função SHALL validar o formato e os hosts proibidos da URL, mas SHALL
+NOT resolver DNS nem buscar a página: nesse caminho, a URL é apenas a origem persistida e nenhum destino de
+rede é acessado.
 
 #### Scenario: Resolução múltipla com um endereço privado é recusada
 
@@ -99,6 +104,18 @@ recusado. Nenhum endereço resolvido SHALL ser usado como destino pelo corpo da 
 - **GIVEN** uma URL de empresa real que resolve apenas para endereços públicos
 - **WHEN** a função valida o destino
 - **THEN** a validação SHALL passar e o fetch SHALL prosseguir
+
+#### Scenario: Texto colado não depende de resolução DNS
+
+- **GIVEN** uma URL HTTPS válida com host permitido e o texto da vaga fornecido no corpo
+- **WHEN** a função processa a ingestão
+- **THEN** ela SHALL usar o texto sem resolver o host nem buscar a página
+
+#### Scenario: Texto colado mantém bloqueios estáticos de host
+
+- **GIVEN** uma URL com IP literal, `localhost` ou sufixo interno, acompanhada de texto colado
+- **WHEN** a função valida a entrada para persistência
+- **THEN** ela SHALL recusar a URL antes de extrair ou gravar a vaga
 
 ### Requirement: Redirects validados um a um
 

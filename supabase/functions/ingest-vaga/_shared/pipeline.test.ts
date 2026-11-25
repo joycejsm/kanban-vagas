@@ -453,10 +453,11 @@ describe('executarPipeline — falhas encadeiam na ordem', () => {
 
   it('texto colado dispensa o scraping', async () => {
     const restaurar = silenciarLogs();
-    const { deps, rastros } = depsBase();
+    const url = 'https://www.indeed.com/viewjob?jk=123';
+    const { deps, rastros } = depsBase({}, [url]);
 
     const resposta = await executarPipeline(
-      requisicao({ token: 'ok', corpo: { url: 'https://empresa.com/1', texto: 'Vaga colada' } }),
+      requisicao({ token: 'ok', corpo: { url, texto: 'Vaga colada' } }),
       deps,
     );
     restaurar();
@@ -464,6 +465,24 @@ describe('executarPipeline — falhas encadeiam na ordem', () => {
     assertEquals(resposta.status, 201);
     assertEquals(rastros.buscar, 0);
     assertEquals(rastros.extrair, 1);
+  });
+
+  it('texto colado ainda recusa URL com host proibido', async () => {
+    const restaurar = silenciarLogs();
+    const { deps, rastros } = depsBase();
+
+    const resposta = await executarPipeline(
+      requisicao({
+        token: 'ok',
+        corpo: { url: 'https://169.254.169.254/latest/meta-data/', texto: 'Vaga colada' },
+      }),
+      deps,
+    );
+    restaurar();
+
+    assertEquals(resposta.status, 422);
+    assertEquals(rastros.buscar, 0);
+    assertEquals(rastros.extrair, 0);
   });
 });
 

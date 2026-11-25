@@ -93,7 +93,7 @@ const MENSAGENS: Record<CodigoErroIngestao, string> = {
  */
 const CODIGO_POR_STATUS: Record<number, CodigoErroIngestao> = {
   401: 'sessao_expirada',
-  403: 'extracao_falhou',
+  403: 'sessao_expirada',
   409: 'duplicada',
   413: 'extracao_falhou',
   422: 'extracao_falhou',
@@ -150,14 +150,13 @@ const CODIGO_DA_FUNCAO: Record<string, CodigoErroIngestao> = {
  * @param corpo Corpo já parseado, se houver. Lido pelo `code` e registrado no log.
  */
 export function mapearErroIngestao(status: number, corpo?: unknown): FalhaIngestao {
-  // If the Edge Function didn't provide a code and we got a 403 (e.g., Cloudflare block), treat it as extraction failure so UI shows fallback text field.
   const codigoDaFuncao = extrairCodigoDoCorpo(corpo);
-  let code = (codigoDaFuncao === undefined ? undefined : CODIGO_DA_FUNCAO[codigoDaFuncao]) ??
-    CODIGO_POR_STATUS[status] ??
-    'erro';
-  if (!codigoDaFuncao && status === 403) {
-    code = 'extracao_falhou';
-  }
+  const codigoMapeado =
+    codigoDaFuncao !== undefined &&
+    Object.prototype.hasOwnProperty.call(CODIGO_DA_FUNCAO, codigoDaFuncao)
+      ? CODIGO_DA_FUNCAO[codigoDaFuncao]
+      : undefined;
+  const code = codigoMapeado ?? CODIGO_POR_STATUS[status] ?? 'erro';
 
   console.error(
     '[acoes/erros] status=%d code=%s code_funcao=%s',
@@ -168,26 +167,7 @@ export function mapearErroIngestao(status: number, corpo?: unknown): FalhaIngest
 
   return { ok: false, code, mensagem: MENSAGENS[code] };
 }
-  // O código que a função reportou vai para o log, e é também o que decide quando reconhecido.
-  const codigoDaFuncao = extrairCodigoDoCorpo(corpo);
 
-  // Tudo que não está no mapa cai em `erro`, 5xx ou não. A distinção entre "a função
-  // quebrou" e "a função respondeu algo que não previa" é interessante no log e
-  // irrelevante para quem está na tela: nos dois casos, só há uma coisa a fazer.
-  const code =
-    (codigoDaFuncao === undefined ? undefined : CODIGO_DA_FUNCAO[codigoDaFuncao]) ??
-    CODIGO_POR_STATUS[status] ??
-    'erro';
-
-  console.error(
-    '[acoes/erros] status=%d code=%s code_funcao=%s',
-    status,
-    code,
-    codigoDaFuncao ?? 'desconhecido',
-  );
-
-  return { ok: false, code, mensagem: MENSAGENS[code] };
-}
 
 /** Lê só o campo `code` do corpo, e só se ele for string. Qualquer outra forma é ignorada. */
 function extrairCodigoDoCorpo(corpo: unknown): string | undefined {

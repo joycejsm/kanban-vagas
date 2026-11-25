@@ -109,6 +109,15 @@ describe('mapearErroIngestao — o code da função decide', () => {
     }
   });
 
+  it('codes que coincidem com propriedades herdadas recuam para o status', () => {
+    for (const code of ['constructor', 'toString', '__proto__']) {
+      const falha = mapearErroIngestao(409, { code });
+
+      expect(falha.code).toBe('duplicada');
+      expect(falha.mensagem).toBe('Você já cadastrou esta vaga.');
+    }
+  });
+
   it('cada code da função tem destino, e nenhum vira erro genérico sem querer', () => {
     // Lista extraída de `_shared/erros.ts`. Um code novo na função sem entrada aqui cairia
     // silenciosamente no fallback por status, que é o mesmo modo de falha que motivou a

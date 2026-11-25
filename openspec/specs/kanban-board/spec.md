@@ -15,10 +15,11 @@ quadro; a persistência das vagas e o contrato das Server Actions que ele consom
 A rota `/` SHALL oferecer um formulário com um campo para a URL da vaga e um botão de cadastro. O envio
 SHALL criar a vaga pelo caminho de extração já existente no servidor, e o quadro SHALL passar a exibir a vaga
 resultante sem que a pessoa recarregue a página. A mensagem exibida após cada envio SHALL ser derivada do
-**código** de erro devolvido pelo servidor e não do texto da mensagem, e o formulário SHALL oferecer o campo
-de texto colado como segunda tentativa quando a extração falhar. O campo de texto SHALL ser reencaminhado ao
-servidor junto com a URL quando preenchido. Nenhum segredo SHALL ser exibido no formulário ou em suas
-mensagens.
+**código** de erro devolvido pelo servidor e não do texto da mensagem, e o formulário SHALL oferecer desde o
+início uma opção para colar o texto completo do anúncio. O formulário SHALL tentar ler o texto da área de
+transferência após ação explícita da pessoa usuária e SHALL manter um campo para colagem manual quando essa
+leitura não estiver disponível. O campo de texto SHALL ser reencaminhado ao servidor junto com a URL quando
+preenchido, sem buscar a página da URL. Nenhum segredo SHALL ser exibido no formulário ou em suas mensagens.
 
 #### Scenario: URL válida cria o card no quadro
 
@@ -27,19 +28,19 @@ mensagens.
 - **THEN** a vaga SHALL aparecer no quadro, na coluna de status em que o servidor a persistiu, e o campo de URL
   SHALL estar limpo para o próximo cadastro
 
-#### Scenario: Extração falha e o formulário oferece o texto colado
+#### Scenario: Texto da vaga pode ser colado antes da extração por URL
 
-- **GIVEN** um envio cujo resultado é falha de extração
-- **WHEN** a tela é atualizada com o resultado
-- **THEN** o formulário SHALL exibir um aviso em pt-BR e **revelar o campo de texto colado**, que fica
-  disponível para o mesmo anúncio
+- **GIVEN** uma URL válida e o texto do anúncio copiado ou disponível para colagem manual
+- **WHEN** a pessoa usuária aciona a opção de colar texto
+- **THEN** o formulário SHALL disponibilizar o campo de texto e SHALL tentar preenchê-lo pela área de
+  transferência, sem impedir a colagem manual se o navegador negar acesso
 
-#### Scenario: Texto colado é reencaminhado no segundo envio
+#### Scenario: Texto colado é usado sem acessar a página do anúncio
 
-- **GIVEN** o campo de texto colado revelado por uma falha de extração
-- **WHEN** o envio é repetido com a mesma URL e o texto preenchido
-- **THEN** o texto e a URL SHALL ser enviados juntos ao servidor, e o resultado do novo envio SHALL substituir
-  o do anterior
+- **GIVEN** uma URL válida e o campo de texto preenchido
+- **WHEN** o formulário é enviado
+- **THEN** o texto e a URL SHALL ser enviados juntos ao servidor, e a extração SHALL usar o texto sem validar
+  o DNS nem buscar a página da URL
 
 #### Scenario: Vaga já cadastrada vira aviso, não erro
 
