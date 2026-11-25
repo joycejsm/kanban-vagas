@@ -144,7 +144,7 @@ flowchart TD
     B --> C[Allowlist]
     C --> D[Rate limit]
     D --> E[Validação de URL + DNS]
-    E --> F[Fetch (8 s, 1.5 MB, 3 redirects)]
+    E --> F["Fetch (8 s, 1.5 MB, 3 redirects)"]
     F --> G[Limpeza do HTML]
     G --> H[Extração ld+json]
     H --> I[Gemini (fallback se necessário)]
