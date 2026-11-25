@@ -93,7 +93,7 @@ const MENSAGENS: Record<CodigoErroIngestao, string> = {
  */
 const CODIGO_POR_STATUS: Record<number, CodigoErroIngestao> = {
   401: 'sessao_expirada',
-  403: 'sessao_expirada',
+  403: 'extracao_falhou',
   409: 'duplicada',
   413: 'extracao_falhou',
   422: 'extracao_falhou',
